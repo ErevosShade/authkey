@@ -1,0 +1,26 @@
+every lock unlock track
+no of sites locked/unlocked
+site name
+site url
+site icon
+is locked
+category
+schedule lock
+daily weekly monthly no of unlocks
+avg lock duration per site 
+
+analytics data for detox
+
+no of streaks
+longest streak 
+challenges completed
+
+sheduler 
+name
+start time
+end time
+repeat
+custom days
+is active
+can modify
+sites list
