@@ -1,16 +1,18 @@
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import type { PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser';
-import { deriveKey, encryptData, decryptData } from './crypto';
-
 interface StoredCredential {
   credentialID: string;
   publicKey: string;
   publicKeyAlgorithm: number;
-  encryptedData: {
+  salt?: string;
+  encryptedData?: {
     iv: string;
     data: string;
   };
 }
+
+const RP_ID = chrome.runtime.id;
+const ORIGIN = `chrome-extension://${chrome.runtime.id}`;
 
 function arrayBufferToBase64String(buffer: ArrayBuffer): string {
   return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(buffer))))
@@ -111,7 +113,7 @@ function derSignatureToRaw(derSignature: ArrayBuffer): ArrayBuffer {
   return rawSignature.buffer;
 }
 
-export const registerUser = async (userId: string, passphrase: string): Promise<{ success: boolean; message: string }> => {
+export const registerUser = async (userId: string): Promise<{ success: boolean; message: string }> => {
   try {
     // Generate registration options 
     const challengeArray = window.crypto.getRandomValues(new Uint8Array(32));
@@ -119,7 +121,7 @@ export const registerUser = async (userId: string, passphrase: string): Promise<
       challenge: arrayBufferToBase64String(challengeArray),
       rp: {
         name: 'AuthKey Extension',
-        id: chrome.runtime.id // Add the RP ID for consistency
+        id: RP_ID,
       },
       user: {
         id: arrayBufferToBase64String(new TextEncoder().encode(userId)),
@@ -158,16 +160,11 @@ export const registerUser = async (userId: string, passphrase: string): Promise<
       credentialID: credential.id,
       publicKey: credential.response.publicKey,
       publicKeyAlgorithm: credential.response.publicKeyAlgorithm || -7, // Default to ES256
-      encryptedData: await encryptData(JSON.stringify({
-        id: credential.id,
-        type: credential.type,
-        response: credential.response,
-        rawId: credential.rawId
-      }), await deriveKey(passphrase))
     };
 
     // Store in Chrome extension storage
     await chrome.storage.local.set({ [`credential_${userId}`]: credentialData });
+    await chrome.storage.local.set({ authkey_user: { userId } });
     console.log('Stored credential data:', credentialData);
 
     return { 
@@ -183,7 +180,7 @@ export const registerUser = async (userId: string, passphrase: string): Promise<
   }
 };
 
-export const authenticateUser = async (userId: string, passphrase: string): Promise<{ success: boolean; message: string }> => {
+export const authenticateUser = async (userId: string): Promise<{ success: boolean; message: string }> => {
   try {
     console.log('Starting authentication process...');
     
@@ -201,7 +198,7 @@ export const authenticateUser = async (userId: string, passphrase: string): Prom
     const challenge = arrayBufferToBase64String(challengeArray);
     const optionsJSON: PublicKeyCredentialRequestOptionsJSON = {
       challenge,
-      rpId: chrome.runtime.id, // Add RP ID for consistency
+      rpId: RP_ID,
       allowCredentials: [{
         id: storedCredential.credentialID,
         type: 'public-key',
@@ -221,15 +218,7 @@ export const authenticateUser = async (userId: string, passphrase: string): Prom
       const clientDataJSON = new TextDecoder().decode(clientDataBuffer);
       const clientData = JSON.parse(clientDataJSON);
       
-      // Decrypt the stored credential data using the passphrase
-      const decryptedData = JSON.parse(
-        await decryptData(
-          storedCredential.encryptedData,
-          await deriveKey(passphrase)
-        )
-      );
-      console.log('Decrypted credential:', {
-        type: decryptedData.type,
+      console.log('Using credential:', {
         publicKeyAlgorithm: storedCredential.publicKeyAlgorithm
       });
 
@@ -240,9 +229,8 @@ export const authenticateUser = async (userId: string, passphrase: string): Prom
       }
 
       // Verify origin
-      const expectedOrigin = `chrome-extension://${chrome.runtime.id}`;
-      if (clientData.origin !== expectedOrigin) {
-        console.error('Origin mismatch', { expected: expectedOrigin, received: clientData.origin });
+      if (clientData.origin !== ORIGIN) {
+        console.error('Origin mismatch', { expected: ORIGIN, received: clientData.origin });
         throw new Error('Origin verification failed');
       }
 

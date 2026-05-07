@@ -12,6 +12,16 @@ export default defineConfig({
   tailwindcss(),
   crx({manifest})
  ],
+  build: {
+    rollupOptions: {
+      input: {
+        index: path.resolve(__dirname, 'index.html'),
+        popup: path.resolve(__dirname, 'popup.html'),
+        options: path.resolve(__dirname, 'options.html'),
+        auth: path.resolve(__dirname, 'auth.html'),
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

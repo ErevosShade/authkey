@@ -1,9 +1,35 @@
-import { startAuthentication } from '@simplewebauthn/browser';
+// Encode bytes to base64url for safe storage.
+function bytesToBase64Url(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function base64UrlToBytes(value: string): Uint8Array {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padLength = (4 - (padded.length % 4)) % 4;
+  const base64 = padded + '='.repeat(padLength);
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return bytes;
+}
+
+export function createSalt(length = 16): string {
+  const bytes = window.crypto.getRandomValues(new Uint8Array(length));
+  return bytesToBase64Url(bytes);
+}
 
 // Key derivation function to generate encryption key from passphrase
-export async function deriveKey(passphrase: string): Promise<CryptoKey> {
+export async function deriveKey(passphrase: string, salt: string | Uint8Array): Promise<CryptoKey> {
   const encoder = new TextEncoder();
-  const salt = encoder.encode('AuthKey-Salt'); // In production, use a random salt and store it
+  const saltBytes = typeof salt === 'string' ? base64UrlToBytes(salt) : salt;
+  const saltBuffer = Uint8Array.from(saltBytes).buffer;
   
   const keyMaterial = await window.crypto.subtle.importKey(
     'raw',
@@ -16,7 +42,7 @@ export async function deriveKey(passphrase: string): Promise<CryptoKey> {
   return window.crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt,
+      salt: saltBuffer,
       iterations: 100000,
       hash: 'SHA-256',
     },

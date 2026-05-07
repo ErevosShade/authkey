@@ -3,8 +3,19 @@
     "name": "AuthKey",
     "version": "0.0.1",
     "description": "A simple extension to manage your passwords.",
-    "permissions": ["storage", "tabs", "scripting", "activeTab"],
+    "permissions": ["storage", "tabs", "activeTab"],
     "host_permissions": ["*://*/*"],
+    "background": {
+        "service_worker": "src/background.ts",
+        "type": "module"
+    },
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["src/contentScript.ts"],
+            "run_at": "document_start"
+        }
+    ],
     "options_page":"options.html",
     "action": {
         "default_popup": "popup.html"
