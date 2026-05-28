@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { Separator } from "../../components/ui/separator";
 import { Button } from "../../components/ui/button";
 import { Lock } from "lucide-react";
 import { GridSmallBackground } from "../../components/ui/grid";
@@ -18,6 +17,19 @@ type UserProfile = {
 };
 
 type Theme = "dark" | "light";
+type Screen       = "main" | "schedule";
+type Repeat       = "never" | "daily" | "weekdays" | "weekends" | "custom";
+type Schedule = {
+  id: string;
+  host: string;
+  startTime: string;
+  endTime: string;
+  repeat: Repeat;
+  days: number[];
+  active: boolean;
+};
+
+const DAYS_SHORT = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 const sendMessage = <T,>(message: unknown): Promise<T> =>
   new Promise((resolve, reject) => {
@@ -73,8 +85,14 @@ const Ico = {
   Back: ({ c }: { c: string }) => <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>,
   Plus: ({ c }: { c: string }) => <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>,
 };
+
+const ENTRY_H  = 32;   // px — height of one site row
+const ENTRY_GAP = 4;   // px — gap between rows
+const MAX_VISIBLE = 3;
+
 function Popup() {
   const [theme, setTheme] = useState<Theme>("dark");
+  const [screen, setScreen]             = useState<Screen>("main");
   const [activeHost, setActiveHost] = useState<string>("");
   const [activeUrl, setActiveUrl] = useState<string>("");
   const [isRegistered, setIsRegistered] = useState(false);
@@ -82,6 +100,14 @@ function Popup() {
   const [status, setStatus] = useState<string>("");
   const [lockState, setLockState] = useState<GetLockStateResponse | null>(null);
   const [lockedSites, setLockedSites] = useState<LockedSiteSummary[]>([]);
+
+  const [schedules, setSchedules]       = useState<Schedule[]>([]);
+  const [schHost, setSchHost]           = useState("");
+  const [schStart, setSchStart]         = useState("09:00");
+  const [schEnd, setSchEnd]             = useState("17:00");
+  const [schRepeat, setSchRepeat]       = useState<Repeat>("daily");
+  const [schDays, setSchDays]           = useState<number[]>([1,2,3,4,5]);
+  const [schStatus, setSchStatus]       = useState("");
 
   const tk = T[theme];
   const dk = theme === "dark";
@@ -112,6 +138,16 @@ function Popup() {
     chrome.storage.local.get("authkey_theme", (r) => {
       if (r.authkey_theme === "light") setTheme("light");
     });
+  };
+
+  const loadSchedules = () => {
+    chrome.storage.local.get("authkey_schedules", (r) => {
+      if (Array.isArray(r.authkey_schedules)) setSchedules(r.authkey_schedules);
+    });
+  };
+  const saveSchedules = (next: Schedule[]) => {
+    setSchedules(next);
+    chrome.storage.local.set({ authkey_schedules: next });
   };
 
   const toggleTheme = () => {
@@ -145,6 +181,7 @@ function Popup() {
     loadActiveTab();
     loadUserProfile();
     loadTheme();
+    loadSchedules();
   }, []);
 
   useEffect(() => {
@@ -173,6 +210,8 @@ function Popup() {
       return;
     }
 
+  
+
     const nextLockState = !lockState?.isLocked;
     await sendMessage({
       type: MESSAGE_TYPES.SET_LOCK_STATE,
@@ -184,6 +223,42 @@ function Popup() {
     await refreshLockState();
     await refreshLockedSites();
   };
+
+  const handleRepeatChange = (r: Repeat) => {
+    setSchRepeat(r);
+    if (r === "daily")    setSchDays([0,1,2,3,4,5,6]);
+    if (r === "weekdays") setSchDays([1,2,3,4,5]);
+    if (r === "weekends") setSchDays([0,6]);
+    if (r === "never")    setSchDays([]);
+  };
+
+  const toggleDay = (d: number) => {
+    setSchDays(prev => prev.includes(d) ? prev.filter(x=>x!==d) : [...prev, d]);
+    setSchRepeat("custom");
+  };
+
+  const handleCreateSchedule = () => {
+    setSchStatus("");
+    if (!schHost.trim())      { setSchStatus("// host required"); return; }
+    if (!schStart || !schEnd) { setSchStatus("// set both times"); return; }
+    if (schStart >= schEnd)   { setSchStatus("// end must be after start"); return; }
+    const s: Schedule = {
+      id: `sch_${Date.now()}`,
+      host: schHost.trim(),
+      startTime: schStart,
+      endTime: schEnd,
+      repeat: schRepeat,
+      days: schDays,
+      active: true,
+    };
+    saveSchedules([...schedules, s]);
+    setSchStatus("// schedule created");
+    setSchHost(activeHost);
+  };
+
+  const deleteSchedule = (id: string) => saveSchedules(schedules.filter(s => s.id !== id));
+  const toggleSchedule = (id: string) =>
+    saveSchedules(schedules.map(s => s.id === id ? { ...s, active: !s.active } : s));
 
   const renderLockStatus = () => {
     if (!lockState?.isLocked) {
@@ -366,8 +441,22 @@ function Popup() {
                 <p className="text-xs text-slate-300 text-center">{status}</p>
               ) : null}
             </>
-          ) : (
+          ) : screen == "main" ? (
             <>
+            <div className="ak-tabs">
+              <button className="ak-tab ak-tab-active">
+                <Ico.Lock c={tk.accent} /> Sites
+              </button>
+              <button className="ak-tab ak-tab-inactive" onClick={() => setScreen("schedule")}>
+                <Ico.Clock c={tk.textMuted} /> Schedule
+                {activeSchedules.length > 0 && (
+                  <span style={{ background: tk.accent, color: "#fff", fontSize: 7, borderRadius: 2, padding: "1px 4px", fontFamily: "'Space Mono',monospace", fontWeight: 700 }}>
+                    {activeSchedules.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
               <div className="ak-card">
                 <h1 className="text-white text-xl font-extrabold font-sans h-8">
                   🌐 Website
@@ -404,12 +493,114 @@ function Popup() {
                 <p className="text-xs text-slate-300 text-center">{status}</p>
               ) : null}
             </>
-          )}
+          ): (
+            <div className="ak-sch">
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
+              <button className="ak-tgl" onClick={() => { setScreen("main"); setSchStatus(""); }}
+                aria-label="Back">
+                <Ico.Back c={tk.textMuted} />
+              </button>
+              <span style={{ fontFamily:"'Space Mono',monospace", fontSize:10, letterSpacing:"0.14em", textTransform:"uppercase", color:tk.textMuted }}>
+                Schedule Lock
+              </span>
+            </div>
+
+            <div className="ak-card">
+              <div className="ak-card-bar ak-card-bar-g" />
+              <span className="ak-clbl">New schedule</span>
+
+              <div style={{ marginBottom:8 }}>
+                <label className="ak-field-lbl">Website</label>
+                <input className="ak-input" placeholder="e.g. twitter.com"
+                  value={schHost} onChange={e => setSchHost(e.target.value)} />
+              </div>
+
+              <div className="ak-time-row" style={{ marginBottom:8 }}>
+                <div className="ak-time-group">
+                  <label className="ak-field-lbl">Start</label>
+                  <input type="time" className="ak-input-time" value={schStart}
+                    onChange={e => setSchStart(e.target.value)}
+                    style={{ background:tk.inputBg, border:`1px solid ${tk.border}`, borderRadius:5, padding:"8px 10px", fontFamily:"'Space Mono',monospace", fontSize:11, color:tk.textSub, outline:"none", width:"100%" }} />
+                </div>
+                <div className="ak-time-group">
+                  <label className="ak-field-lbl">End</label>
+                  <input type="time" className="ak-input-time" value={schEnd}
+                    onChange={e => setSchEnd(e.target.value)}
+                    style={{ background:tk.inputBg, border:`1px solid ${tk.border}`, borderRadius:5, padding:"8px 10px", fontFamily:"'Space Mono',monospace", fontSize:11, color:tk.textSub, outline:"none", width:"100%" }} />
+                </div>
+              </div>
+
+              <div style={{ marginBottom:6 }}>
+                <label className="ak-field-lbl">Repeat</label>
+                <div className="ak-repeat-row">
+                  {(["never","daily","weekdays","weekends","custom"] as Repeat[]).map(r => (
+                    <button key={r}
+                      className={`ak-repeat-pill ${schRepeat===r?"ak-repeat-pill-on":"ak-repeat-pill-off"}`}
+                      onClick={() => handleRepeatChange(r)}>
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom:10 }}>
+                <label className="ak-field-lbl">Days</label>
+                <div className="ak-days-row">
+                  {DAYS_SHORT.map((d, i) => (
+                    <button key={i}
+                      className={`ak-day ${schDays.includes(i)?"ak-day-on":"ak-day-off"}`}
+                      onClick={() => toggleDay(i)}>
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button className="ak-cta" onClick={handleCreateSchedule}>
+                <Ico.Plus c={tk.text} /> Create Schedule
+              </button>
+              {schStatus && <p className="ak-sch-status" style={{ marginTop:8 }}>{schStatus}</p>}
+            </div>
+            
+            </div>
+            {/* Active schedules */}
+            {schedules.length > 0 && (
+              <div className="ak-card">
+                <div className="ak-card-bar ak-card-bar-n" />
+                <div className="ak-sites-hdr">
+                  <span className="ak-clbl" style={{ marginBottom:0 }}>Active schedules</span>
+                  <span className="ak-sites-cnt">{schedules.length}</span>
+                </div>
+                <div className="ak-sch-list">
+                  {schedules.map(s => (
+                    <div key={s.id} className="ak-sch-entry">
+                      <div className="ak-sch-info">
+                        <div className="ak-sch-host">{s.host}</div>
+                        <div className="ak-sch-time">
+                          {s.startTime} → {s.endTime} · {s.repeat}
+                        </div>
+                      </div>
+                      <div className="ak-sch-actions">
+                        <div className={`ak-switch ${s.active?"ak-switch-on":"ak-switch-off"}`}
+                          onClick={() => toggleSchedule(s.id)} role="button" aria-label="Toggle schedule">
+                          <div className="ak-switch-knob" />
+                        </div>
+                        <button className="ak-del-btn" onClick={() => deleteSchedule(s.id)} aria-label="Delete">
+                          <Ico.Trash c={tk.textMuted} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
         </div>
       </div>
 
     </GridSmallBackground>
+
   );
+
 }
 
 createRoot(document.getElementById("root")!).render(<Popup />);
