@@ -1,7 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "../../components/ui/button";
-import { Lock } from "lucide-react";
-import { GridSmallBackground } from "../../components/ui/grid";
 import { createRoot } from "react-dom/client";
 import { registerUser } from "@/webAuthn";
 import {
@@ -17,8 +14,8 @@ type UserProfile = {
 };
 
 type Theme = "dark" | "light";
-type Screen       = "main" | "schedule";
-type Repeat       = "never" | "daily" | "weekdays" | "weekends" | "custom";
+type Screen = "main" | "schedule";
+type Repeat = "never" | "daily" | "weekdays" | "weekends" | "custom";
 type Schedule = {
   id: string;
   host: string;
@@ -35,10 +32,7 @@ const sendMessage = <T,>(message: unknown): Promise<T> =>
   new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(message, (response) => {
       const error = chrome.runtime.lastError;
-      if (error) {
-        reject(error);
-        return;
-      }
+      if (error) { reject(error); return; }
       resolve(response as T);
     });
   });
@@ -77,16 +71,16 @@ const ShieldFP = ({ theme }: { theme: Theme }) => {
   return (
     <svg width="52" height="52" viewBox="0 0 72 72" fill="none">
       <path d="M36 6L10 16v20c0 17 11.2 32.8 26 36 14.8-3.2 26-19 26-36V16L36 6z"
-        stroke={d?"#252530":"#c8c6c0"} strokeWidth="1.5" strokeLinejoin="round"/>
+        stroke={d ? "#252530" : "#c8c6c0"} strokeWidth="1.5" strokeLinejoin="round" />
       <path d="M36 12L16 20v16c0 13.4 8.8 25.8 20 28.4C47.2 61.8 56 49.4 56 36V20L36 12z"
-        fill={d?"#0f0f14":"#e8e7e2"} stroke={d?"#1e1e28":"#d4d2cc"} strokeWidth="1"/>
-      <path d="M36 28c-4.42 0-8 3.58-8 8" stroke={d?"#484858":"#b0aeb0"} strokeWidth="1.8" strokeLinecap="round"/>
-      <path d="M36 32c-2.21 0-4 1.79-4 4"  stroke={d?"#585868":"#a0a0a0"} strokeWidth="1.8" strokeLinecap="round"/>
-      <path d="M36 28c4.42 0 8 3.58 8 8"   stroke={d?"#484858":"#b0aeb0"} strokeWidth="1.8" strokeLinecap="round"/>
-      <path d="M36 32c2.21 0 4 1.79 4 4"   stroke={d?"#585868":"#a0a0a0"} strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="36" y1="36" x2="36" y2="46" stroke={d?"#484858":"#b0aeb0"} strokeWidth="1.8" strokeLinecap="round"/>
-      <path d="M31 41c0 2.76 2.24 5 5 5s5-2.24 5-5" stroke={d?"#505060":"#b0aeb0"} strokeWidth="1.8" strokeLinecap="round"/>
-      <circle cx="36" cy="36" r="1.8" fill={d?"#606070":"#a8a8a8"}/>
+        fill={d ? "#0f0f14" : "#e8e7e2"} stroke={d ? "#1e1e28" : "#d4d2cc"} strokeWidth="1" />
+      <path d="M36 28c-4.42 0-8 3.58-8 8" stroke={d ? "#484858" : "#b0aeb0"} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M36 32c-2.21 0-4 1.79-4 4" stroke={d ? "#585868" : "#a0a0a0"} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M36 28c4.42 0 8 3.58 8 8" stroke={d ? "#484858" : "#b0aeb0"} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M36 32c2.21 0 4 1.79 4 4" stroke={d ? "#585868" : "#a0a0a0"} strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="36" y1="36" x2="36" y2="46" stroke={d ? "#484858" : "#b0aeb0"} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M31 41c0 2.76 2.24 5 5 5s5-2.24 5-5" stroke={d ? "#505060" : "#b0aeb0"} strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="36" cy="36" r="1.8" fill={d ? "#606070" : "#a8a8a8"} />
     </svg>
   );
 };
@@ -106,7 +100,7 @@ const Ico = {
   Plus: ({ c }: { c: string }) => <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>,
 };
 
-const ENTRY_H  = 32;   // px — height of one site row
+const ENTRY_H = 32;   // px — height of one site row
 const ENTRY_GAP = 4;   // px — gap between rows
 const MAX_VISIBLE = 3;
 
@@ -117,7 +111,7 @@ function listHeight(count: number): number {
 
 function Popup() {
   const [theme, setTheme] = useState<Theme>("dark");
-  const [screen, setScreen]             = useState<Screen>("main");
+  const [screen, setScreen] = useState<Screen>("main");
   const [activeHost, setActiveHost] = useState<string>("");
   const [activeUrl, setActiveUrl] = useState<string>("");
   const [isRegistered, setIsRegistered] = useState(false);
@@ -126,13 +120,13 @@ function Popup() {
   const [lockState, setLockState] = useState<GetLockStateResponse | null>(null);
   const [lockedSites, setLockedSites] = useState<LockedSiteSummary[]>([]);
 
-  const [schedules, setSchedules]       = useState<Schedule[]>([]);
-  const [schHost, setSchHost]           = useState("");
-  const [schStart, setSchStart]         = useState("09:00");
-  const [schEnd, setSchEnd]             = useState("17:00");
-  const [schRepeat, setSchRepeat]       = useState<Repeat>("daily");
-  const [schDays, setSchDays]           = useState<number[]>([1,2,3,4,5]);
-  const [schStatus, setSchStatus]       = useState("");
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [schHost, setSchHost] = useState("");
+  const [schStart, setSchStart] = useState("09:00");
+  const [schEnd, setSchEnd] = useState("17:00");
+  const [schRepeat, setSchRepeat] = useState<Repeat>("daily");
+  const [schDays, setSchDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [schStatus, setSchStatus] = useState("");
 
   const tk = T[theme];
   const dk = theme === "dark";
@@ -144,6 +138,7 @@ function Popup() {
       const host = url ? new URL(url).hostname : "";
       setActiveUrl(url);
       setActiveHost(host);
+      setSchHost(host);
     });
   };
 
@@ -182,24 +177,15 @@ function Popup() {
   };
 
 
-  const refreshLockState = useCallback(async () => {
-    if (!activeHost) {
-      return;
-    }
-
-    const response = await sendMessage<GetLockStateResponse>({
-      type: MESSAGE_TYPES.GET_LOCK_STATE,
-      host: activeHost,
-      url: activeUrl,
-    });
-    setLockState(response);
+   const refreshLockState = useCallback(async () => {
+    if (!activeHost) return;
+    const r = await sendMessage<GetLockStateResponse>({ type: MESSAGE_TYPES.GET_LOCK_STATE, host: activeHost, url: activeUrl });
+    setLockState(r);
   }, [activeHost, activeUrl]);
 
   const refreshLockedSites = useCallback(async () => {
-    const response = await sendMessage<GetLockedSitesResponse>({
-      type: MESSAGE_TYPES.GET_LOCKED_SITES,
-    });
-    setLockedSites(response.sites.filter((site) => site.isLocked));
+    const r = await sendMessage<GetLockedSitesResponse>({ type: MESSAGE_TYPES.GET_LOCKED_SITES });
+    setLockedSites(r.sites.filter(s => s.isLocked));
   }, []);
 
   useEffect(() => {
@@ -216,57 +202,37 @@ function Popup() {
 
   const handleRegister = async () => {
     setStatus("");
-
-    if (!userId.trim()) {
-      setStatus("User name is required.");
-      return;
-    }
-
-    const result = await registerUser(userId.trim());
-    setStatus(result.message);
-    if (result.success) {
-      setIsRegistered(true);
-    }
+    if (!userId.trim()) { setStatus("// username required"); return; }
+    const r = await registerUser(userId.trim());
+    setStatus(r.message);
+    if (r.success) setIsRegistered(true);
   };
 
   const handleToggleLock = async () => {
-    if (!activeHost) {
-      setStatus("No active website detected.");
-      return;
-    }
-
-  
-
-    const nextLockState = !lockState?.isLocked;
-    await sendMessage({
-      type: MESSAGE_TYPES.SET_LOCK_STATE,
-      host: activeHost,
-      url: activeUrl,
-      isLocked: nextLockState,
-    });
-
-    await refreshLockState();
-    await refreshLockedSites();
+    if (!activeHost) { setStatus("// no active tab"); return; }
+    const next = !lockState?.isLocked;
+    await sendMessage({ type: MESSAGE_TYPES.SET_LOCK_STATE, host: activeHost, url: activeUrl, isLocked: next });
+    await refreshLockState(); await refreshLockedSites();
   };
 
   const handleRepeatChange = (r: Repeat) => {
     setSchRepeat(r);
-    if (r === "daily")    setSchDays([0,1,2,3,4,5,6]);
-    if (r === "weekdays") setSchDays([1,2,3,4,5]);
-    if (r === "weekends") setSchDays([0,6]);
-    if (r === "never")    setSchDays([]);
+    if (r === "daily") setSchDays([0, 1, 2, 3, 4, 5, 6]);
+    if (r === "weekdays") setSchDays([1, 2, 3, 4, 5]);
+    if (r === "weekends") setSchDays([0, 6]);
+    if (r === "never") setSchDays([]);
   };
 
   const toggleDay = (d: number) => {
-    setSchDays(prev => prev.includes(d) ? prev.filter(x=>x!==d) : [...prev, d]);
+    setSchDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
     setSchRepeat("custom");
   };
 
   const handleCreateSchedule = () => {
     setSchStatus("");
-    if (!schHost.trim())      { setSchStatus("// host required"); return; }
+    if (!schHost.trim()) { setSchStatus("// host required"); return; }
     if (!schStart || !schEnd) { setSchStatus("// set both times"); return; }
-    if (schStart >= schEnd)   { setSchStatus("// end must be after start"); return; }
+    if (schStart >= schEnd) { setSchStatus("// end must be after start"); return; }
     const s: Schedule = {
       id: `sch_${Date.now()}`,
       host: schHost.trim(),
@@ -284,22 +250,22 @@ function Popup() {
   const deleteSchedule = (id: string) => saveSchedules(schedules.filter(s => s.id !== id));
   const toggleSchedule = (id: string) =>
     saveSchedules(schedules.map(s => s.id === id ? { ...s, active: !s.active } : s));
-    const ls = (() => {
-    if (!lockState?.isLocked) return { label: "UNLOCKED",    type: "neutral" } as const;
-    if (lockState.isUnlocked) return { label: "TEMP·UNLOCK", type: "amber"   } as const;
-    return                           { label: "LOCKED",      type: "red"     } as const;
+  const ls = (() => {
+    if (!lockState?.isLocked) return { label: "UNLOCKED", type: "neutral" } as const;
+    if (lockState.isUnlocked) return { label: "TEMP·UNLOCK", type: "amber" } as const;
+    return { label: "LOCKED", type: "red" } as const;
   })();
 
-  const ledStyle = ls.type==="red"
-    ? { background: tk.accent,    boxShadow: dk ? `0 0 6px ${tk.accent}88`:"none" }
-    : ls.type==="amber"
-    ? { background: tk.amber,     boxShadow: dk ? `0 0 6px ${tk.amber}88`:"none"  }
-    : { background: tk.ledNeutral };
-  const ledColor = ls.type==="red" ? tk.accent : ls.type==="amber" ? tk.amber : tk.textMuted;
+  const ledStyle = ls.type === "red"
+    ? { background: tk.accent, boxShadow: dk ? `0 0 6px ${tk.accent}88` : "none" }
+    : ls.type === "amber"
+      ? { background: tk.amber, boxShadow: dk ? `0 0 6px ${tk.amber}88` : "none" }
+      : { background: tk.ledNeutral };
+  const ledColor = ls.type === "red" ? tk.accent : ls.type === "amber" ? tk.amber : tk.textMuted;
 
   const protectedListH = listHeight(lockedSites.length);
 
-  
+
 
   const activeSchedules = schedules.filter(s => s.active);
 
@@ -467,7 +433,7 @@ function Popup() {
                 <label className="ak-field-lbl">Username</label>
                 <input type="text" placeholder="e.g. john_doe" value={userId}
                   onChange={e => setUserId(e.target.value)}
-                  onKeyDown={e => e.key==="Enter" && handleRegister()}
+                  onKeyDown={e => e.key === "Enter" && handleRegister()}
                   className="ak-input" />
               </div>
               <button className="ak-cta" onClick={handleRegister}>
@@ -498,11 +464,11 @@ function Popup() {
 
             {/* Active site card */}
             <div className="ak-card">
-              <div className={`ak-card-bar ${ls.type==="red"?"ak-card-bar-r":"ak-card-bar-n"}`} />
+              <div className={`ak-card-bar ${ls.type === "red" ? "ak-card-bar-r" : "ak-card-bar-n"}`} />
               <span className="ak-clbl">Active site</span>
               <div className="ak-site-row">
                 <div className="ak-site-ico"><Ico.Globe c={tk.iconColor} /></div>
-                <span className={`ak-hostname ${!activeHost?"ak-hostname-empty":""}`}>
+                <span className={`ak-hostname ${!activeHost ? "ak-hostname-empty" : ""}`}>
                   {activeHost || "no active tab"}
                 </span>
               </div>
@@ -512,7 +478,7 @@ function Popup() {
                   <span className="ak-led-lbl" style={{ color: ledColor }}>{ls.label}</span>
                 </div>
                 <button
-                  className={`ak-lock-btn ${lockState?.isLocked?"ak-lock-btn-on":"ak-lock-btn-off"}`}
+                  className={`ak-lock-btn ${lockState?.isLocked ? "ak-lock-btn-on" : "ak-lock-btn-off"}`}
                   onClick={handleToggleLock}
                 >
                   {lockState?.isLocked
@@ -528,7 +494,7 @@ function Popup() {
               <div className="ak-card-bar ak-card-bar-n" />
               <div className="ak-sites-hdr">
                 <span className="ak-clbl" style={{ marginBottom: 0 }}>Protected</span>
-                <span className="ak-sites-cnt">{lockedSites.length} site{lockedSites.length!==1?"s":""}</span>
+                <span className="ak-sites-cnt">{lockedSites.length} site{lockedSites.length !== 1 ? "s" : ""}</span>
               </div>
               <div
                 className="ak-sites-list"
@@ -550,7 +516,7 @@ function Popup() {
 
             {/* Account bar — always last, no extra space above */}
             <div className="ak-acct">
-              <div className="ak-avatar">{userId ? userId.slice(0,2) : "AK"}</div>
+              <div className="ak-avatar">{userId ? userId.slice(0, 2) : "AK"}</div>
               <span className="ak-uname">{userId || "user"}</span>
               <button className="ak-gear" aria-label="Open settings"
                 onClick={() => chrome.runtime.openOptionsPage?.()}>
@@ -564,12 +530,12 @@ function Popup() {
           <div className="ak-sch">
 
             {/* Back + heading */}
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
               <button className="ak-tgl" onClick={() => { setScreen("main"); setSchStatus(""); }}
                 aria-label="Back">
                 <Ico.Back c={tk.textMuted} />
               </button>
-              <span style={{ fontFamily:"'Space Mono',monospace", fontSize:10, letterSpacing:"0.14em", textTransform:"uppercase", color:tk.textMuted }}>
+              <span style={{ fontFamily: "'Space Mono',monospace", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: tk.textMuted }}>
                 Schedule Lock
               </span>
             </div>
@@ -579,33 +545,33 @@ function Popup() {
               <div className="ak-card-bar ak-card-bar-g" />
               <span className="ak-clbl">New schedule</span>
 
-              <div style={{ marginBottom:8 }}>
+              <div style={{ marginBottom: 8 }}>
                 <label className="ak-field-lbl">Website</label>
                 <input className="ak-input" placeholder="e.g. twitter.com"
                   value={schHost} onChange={e => setSchHost(e.target.value)} />
               </div>
 
-              <div className="ak-time-row" style={{ marginBottom:8 }}>
+              <div className="ak-time-row" style={{ marginBottom: 8 }}>
                 <div className="ak-time-group">
                   <label className="ak-field-lbl">Start</label>
                   <input type="time" className="ak-input-time" value={schStart}
                     onChange={e => setSchStart(e.target.value)}
-                    style={{ background:tk.inputBg, border:`1px solid ${tk.border}`, borderRadius:5, padding:"8px 10px", fontFamily:"'Space Mono',monospace", fontSize:11, color:tk.textSub, outline:"none", width:"100%" }} />
+                    style={{ background: tk.inputBg, border: `1px solid ${tk.border}`, borderRadius: 5, padding: "8px 10px", fontFamily: "'Space Mono',monospace", fontSize: 11, color: tk.textSub, outline: "none", width: "100%" }} />
                 </div>
                 <div className="ak-time-group">
                   <label className="ak-field-lbl">End</label>
                   <input type="time" className="ak-input-time" value={schEnd}
                     onChange={e => setSchEnd(e.target.value)}
-                    style={{ background:tk.inputBg, border:`1px solid ${tk.border}`, borderRadius:5, padding:"8px 10px", fontFamily:"'Space Mono',monospace", fontSize:11, color:tk.textSub, outline:"none", width:"100%" }} />
+                    style={{ background: tk.inputBg, border: `1px solid ${tk.border}`, borderRadius: 5, padding: "8px 10px", fontFamily: "'Space Mono',monospace", fontSize: 11, color: tk.textSub, outline: "none", width: "100%" }} />
                 </div>
               </div>
 
-              <div style={{ marginBottom:6 }}>
+              <div style={{ marginBottom: 6 }}>
                 <label className="ak-field-lbl">Repeat</label>
                 <div className="ak-repeat-row">
-                  {(["never","daily","weekdays","weekends","custom"] as Repeat[]).map(r => (
+                  {(["never", "daily", "weekdays", "weekends", "custom"] as Repeat[]).map(r => (
                     <button key={r}
-                      className={`ak-repeat-pill ${schRepeat===r?"ak-repeat-pill-on":"ak-repeat-pill-off"}`}
+                      className={`ak-repeat-pill ${schRepeat === r ? "ak-repeat-pill-on" : "ak-repeat-pill-off"}`}
                       onClick={() => handleRepeatChange(r)}>
                       {r}
                     </button>
@@ -613,12 +579,12 @@ function Popup() {
                 </div>
               </div>
 
-              <div style={{ marginBottom:10 }}>
+              <div style={{ marginBottom: 10 }}>
                 <label className="ak-field-lbl">Days</label>
                 <div className="ak-days-row">
                   {DAYS_SHORT.map((d, i) => (
                     <button key={i}
-                      className={`ak-day ${schDays.includes(i)?"ak-day-on":"ak-day-off"}`}
+                      className={`ak-day ${schDays.includes(i) ? "ak-day-on" : "ak-day-off"}`}
                       onClick={() => toggleDay(i)}>
                       {d}
                     </button>
@@ -629,7 +595,7 @@ function Popup() {
               <button className="ak-cta" onClick={handleCreateSchedule}>
                 <Ico.Plus c={tk.text} /> Create Schedule
               </button>
-              {schStatus && <p className="ak-sch-status" style={{ marginTop:8 }}>{schStatus}</p>}
+              {schStatus && <p className="ak-sch-status" style={{ marginTop: 8 }}>{schStatus}</p>}
             </div>
 
             {/* Active schedules */}
@@ -637,7 +603,7 @@ function Popup() {
               <div className="ak-card">
                 <div className="ak-card-bar ak-card-bar-n" />
                 <div className="ak-sites-hdr">
-                  <span className="ak-clbl" style={{ marginBottom:0 }}>Active schedules</span>
+                  <span className="ak-clbl" style={{ marginBottom: 0 }}>Active schedules</span>
                   <span className="ak-sites-cnt">{schedules.length}</span>
                 </div>
                 <div className="ak-sch-list">
@@ -650,7 +616,7 @@ function Popup() {
                         </div>
                       </div>
                       <div className="ak-sch-actions">
-                        <div className={`ak-switch ${s.active?"ak-switch-on":"ak-switch-off"}`}
+                        <div className={`ak-switch ${s.active ? "ak-switch-on" : "ak-switch-off"}`}
                           onClick={() => toggleSchedule(s.id)} role="button" aria-label="Toggle schedule">
                           <div className="ak-switch-knob" />
                         </div>
