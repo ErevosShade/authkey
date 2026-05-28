@@ -71,6 +71,26 @@ const T = {
   },
 } as const;
 
+/* Shield with fingerprint icon, used in header and empty state */
+const ShieldFP = ({ theme }: { theme: Theme }) => {
+  const d = theme === "dark";
+  return (
+    <svg width="52" height="52" viewBox="0 0 72 72" fill="none">
+      <path d="M36 6L10 16v20c0 17 11.2 32.8 26 36 14.8-3.2 26-19 26-36V16L36 6z"
+        stroke={d?"#252530":"#c8c6c0"} strokeWidth="1.5" strokeLinejoin="round"/>
+      <path d="M36 12L16 20v16c0 13.4 8.8 25.8 20 28.4C47.2 61.8 56 49.4 56 36V20L36 12z"
+        fill={d?"#0f0f14":"#e8e7e2"} stroke={d?"#1e1e28":"#d4d2cc"} strokeWidth="1"/>
+      <path d="M36 28c-4.42 0-8 3.58-8 8" stroke={d?"#484858":"#b0aeb0"} strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M36 32c-2.21 0-4 1.79-4 4"  stroke={d?"#585868":"#a0a0a0"} strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M36 28c4.42 0 8 3.58 8 8"   stroke={d?"#484858":"#b0aeb0"} strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M36 32c2.21 0 4 1.79 4 4"   stroke={d?"#585868":"#a0a0a0"} strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="36" y1="36" x2="36" y2="46" stroke={d?"#484858":"#b0aeb0"} strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M31 41c0 2.76 2.24 5 5 5s5-2.24 5-5" stroke={d?"#505060":"#b0aeb0"} strokeWidth="1.8" strokeLinecap="round"/>
+      <circle cx="36" cy="36" r="1.8" fill={d?"#606070":"#a8a8a8"}/>
+    </svg>
+  );
+};
+
 /* ─── Icons ─── */
 const Ico = {
   Sun: () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>,
@@ -89,6 +109,11 @@ const Ico = {
 const ENTRY_H  = 32;   // px — height of one site row
 const ENTRY_GAP = 4;   // px — gap between rows
 const MAX_VISIBLE = 3;
+
+function listHeight(count: number): number {
+  const visible = Math.min(Math.max(count, 1), MAX_VISIBLE);
+  return visible * ENTRY_H + Math.max(visible - 1, 0) * ENTRY_GAP;
+}
 
 function Popup() {
   const [theme, setTheme] = useState<Theme>("dark");
@@ -259,18 +284,24 @@ function Popup() {
   const deleteSchedule = (id: string) => saveSchedules(schedules.filter(s => s.id !== id));
   const toggleSchedule = (id: string) =>
     saveSchedules(schedules.map(s => s.id === id ? { ...s, active: !s.active } : s));
+    const ls = (() => {
+    if (!lockState?.isLocked) return { label: "UNLOCKED",    type: "neutral" } as const;
+    if (lockState.isUnlocked) return { label: "TEMP·UNLOCK", type: "amber"   } as const;
+    return                           { label: "LOCKED",      type: "red"     } as const;
+  })();
 
-  const renderLockStatus = () => {
-    if (!lockState?.isLocked) {
-      return "Not locked";
-    }
+  const ledStyle = ls.type==="red"
+    ? { background: tk.accent,    boxShadow: dk ? `0 0 6px ${tk.accent}88`:"none" }
+    : ls.type==="amber"
+    ? { background: tk.amber,     boxShadow: dk ? `0 0 6px ${tk.amber}88`:"none"  }
+    : { background: tk.ledNeutral };
+  const ledColor = ls.type==="red" ? tk.accent : ls.type==="amber" ? tk.amber : tk.textMuted;
 
-    if (lockState.isUnlocked) {
-      return "Unlocked (temporary)";
-    }
+  const protectedListH = listHeight(lockedSites.length);
 
-    return "Locked";
-  };
+  
+
+  const activeSchedules = schedules.filter(s => s.active);
 
   /* ════════════════ CSS ════════════════ */
   const css = `
@@ -398,51 +429,59 @@ function Popup() {
   `;
 
   return (
-    <GridSmallBackground>
-      <div className="ak">
-        <style>{css}</style>
-        <div className="ak-grid" />
-        <div className="ak-body">
+    <div className="ak">
+      <style>{css}</style>
+      <div className="ak-grid" />
+      <div className="ak-body">
 
-          <div className="ak-hdr">
-            <div className="ak-wm">
-              AuthKey <span className="ak-wm-dot" />
-            </div>
-            <div className="ak-hdr-r">
-              <span className="ak-ver">v1.0</span>
-              <button className="ak-tgl" onClick={toggleTheme} aria-label="Toggle theme">
-                {dk ? <Ico.Sun /> : <Ico.Moon />}
-              </button>
-            </div>
+        {/* ── Header ── */}
+        <div className="ak-hdr">
+          <div className="ak-wm">
+            AuthKey <span className="ak-wm-dot" />
           </div>
-          <div className="ak-div">
-            <div className="ak-div-line" />
-            <div className="ak-div-acc" />
+          <div className="ak-hdr-r">
+            <span className="ak-ver">v1.0</span>
+            <button className="ak-tgl" onClick={toggleTheme} aria-label="Toggle theme">
+              {dk ? <Ico.Sun /> : <Ico.Moon />}
+            </button>
           </div>
+        </div>
+        <div className="ak-div">
+          <div className="ak-div-line" />
+          <div className="ak-div-acc" />
+        </div>
 
-          {!isRegistered ? (
-            <>
-              <h1 className="text-white text-2xl font-extrabold font-sans text-wrap-balance text-center">
-                Set up your passcode to use AuthKey
-              </h1>
-              <div className="w-full space-y-2">
+        {/* ── Setup ── */}
+        {!isRegistered ? (
+          <div className="ak-setup">
+            <div className="ak-shield-wrap">
+              <div className="ak-shield-ring ak-shield-ring-1" />
+              <div className="ak-shield-ring ak-shield-ring-2" />
+              <ShieldFP theme={theme} />
+            </div>
+            <span className="ak-eyebrow">WebAuthn · Biometric</span>
+            <h2 className="ak-setup-title">Set up AuthKey</h2>
+            <p className="ak-setup-sub">secure your browsing</p>
+            <div className="ak-form">
+              <div>
+                <label className="ak-field-lbl">Username</label>
                 <input type="text" placeholder="e.g. john_doe" value={userId}
                   onChange={e => setUserId(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleRegister()}
+                  onKeyDown={e => e.key==="Enter" && handleRegister()}
                   className="ak-input" />
               </div>
-              <Button
-                className="mt-4 px-10 py-7 rounded-md cursor-pointer"
-                onClick={handleRegister}
-              >
-                Register AuthKey
-              </Button>
-              {status ? (
-                <p className="text-xs text-slate-300 text-center">{status}</p>
-              ) : null}
-            </>
-          ) : screen == "main" ? (
-            <>
+              <button className="ak-cta" onClick={handleRegister}>
+                <Ico.Shield c={tk.text} /> Register AuthKey
+              </button>
+            </div>
+            {status && <p className="ak-status">{status}</p>}
+          </div>
+
+        ) : screen === "main" ? (
+          /* ── Main ── */
+          <div className="ak-main">
+
+            {/* Nav tabs */}
             <div className="ak-tabs">
               <button className="ak-tab ak-tab-active">
                 <Ico.Lock c={tk.accent} /> Sites
@@ -457,45 +496,75 @@ function Popup() {
               </button>
             </div>
 
-              <div className="ak-card">
-                <h1 className="text-white text-xl font-extrabold font-sans h-8">
-                  🌐 Website
-                </h1>
-                <span className="text-sm text-slate-300">{activeHost || "No active tab"}</span>
-                <span className="text-xs text-slate-400">{renderLockStatus()}</span>
-                <button className="ak-cta" onClick={handleRegister}>
-                  <Ico.Shield c={tk.text} /> Register AuthKey
+            {/* Active site card */}
+            <div className="ak-card">
+              <div className={`ak-card-bar ${ls.type==="red"?"ak-card-bar-r":"ak-card-bar-n"}`} />
+              <span className="ak-clbl">Active site</span>
+              <div className="ak-site-row">
+                <div className="ak-site-ico"><Ico.Globe c={tk.iconColor} /></div>
+                <span className={`ak-hostname ${!activeHost?"ak-hostname-empty":""}`}>
+                  {activeHost || "no active tab"}
+                </span>
+              </div>
+              <div className="ak-srow">
+                <div className="ak-led-row">
+                  <div className="ak-led" style={ledStyle} />
+                  <span className="ak-led-lbl" style={{ color: ledColor }}>{ls.label}</span>
+                </div>
+                <button
+                  className={`ak-lock-btn ${lockState?.isLocked?"ak-lock-btn-on":"ak-lock-btn-off"}`}
+                  onClick={handleToggleLock}
+                >
+                  {lockState?.isLocked
+                    ? <><Ico.Unlock c={tk.accent} /> Remove</>
+                    : <><Ico.Lock c={tk.textMuted} /> Lock</>
+                  }
                 </button>
               </div>
+            </div>
 
-              <div className="rounded-[10%] shadow-[inset_11.11px_11.11px_17px_#131316,inset_-11.11px_-11.11px_17px_#1D1D20] bg-[linear-gradient(145deg,#121214,#1E1E22)] w-full h-64 mt-4 flex items-center flex-col gap-2 p-4">
-                <h1 className="text-white text-xl font-extrabold font-sans h-10 flex items-center justify-around gap-2">
-                  <Lock /> Your Protected Websites
-                </h1>
-                <ul className="w-full h-full overflow-y-auto overflow-x-hidden text-sm">
-                  {lockedSites.length === 0 ? (
-                    <li className="text-center text-slate-400">No locked sites yet.</li>
-                  ) : (
-                    lockedSites.map((site) => (
-                      <li
-                        key={site.host}
-                        className="my-3 w-full bg-zinc-800 px-4 py-2 rounded-md flex items-center justify-between"
-                      >
-                        <span className="text-white text-sm font-sans">{site.host}</span>
-                        <span className="text-xs text-slate-400">Locked</span>
-                      </li>
-                    ))
-                  )}
-                </ul>
+            {/* Protected sites — card shrinks to content, list grows 1→3 rows then scrolls */}
+            <div className="ak-card">
+              <div className="ak-card-bar ak-card-bar-n" />
+              <div className="ak-sites-hdr">
+                <span className="ak-clbl" style={{ marginBottom: 0 }}>Protected</span>
+                <span className="ak-sites-cnt">{lockedSites.length} site{lockedSites.length!==1?"s":""}</span>
               </div>
+              <div
+                className="ak-sites-list"
+                style={{ height: protectedListH }}
+              >
+                {lockedSites.length === 0
+                  ? <p className="ak-empty">// no protected sites</p>
+                  : lockedSites.map(site => (
+                    <div key={site.host} className="ak-site-entry">
+                      <span className="ak-site-host">{site.host}</span>
+                      <span className="ak-site-tag">locked</span>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
 
-              {status ? (
-                <p className="text-xs text-slate-300 text-center">{status}</p>
-              ) : null}
-            </>
-          ): (
-            <div className="ak-sch">
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
+            {status && <p className="ak-status" style={{ marginBottom: 8 }}>{status}</p>}
+
+            {/* Account bar — always last, no extra space above */}
+            <div className="ak-acct">
+              <div className="ak-avatar">{userId ? userId.slice(0,2) : "AK"}</div>
+              <span className="ak-uname">{userId || "user"}</span>
+              <button className="ak-gear" aria-label="Open settings"
+                onClick={() => chrome.runtime.openOptionsPage?.()}>
+                <Ico.Gear c={tk.textMuted} />
+              </button>
+            </div>
+          </div>
+
+        ) : (
+          /* ── Schedule screen ── */
+          <div className="ak-sch">
+
+            {/* Back + heading */}
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
               <button className="ak-tgl" onClick={() => { setScreen("main"); setSchStatus(""); }}
                 aria-label="Back">
                 <Ico.Back c={tk.textMuted} />
@@ -505,6 +574,7 @@ function Popup() {
               </span>
             </div>
 
+            {/* Create schedule form */}
             <div className="ak-card">
               <div className="ak-card-bar ak-card-bar-g" />
               <span className="ak-clbl">New schedule</span>
@@ -561,8 +631,7 @@ function Popup() {
               </button>
               {schStatus && <p className="ak-sch-status" style={{ marginTop:8 }}>{schStatus}</p>}
             </div>
-            
-            </div>
+
             {/* Active schedules */}
             {schedules.length > 0 && (
               <div className="ak-card">
@@ -594,13 +663,11 @@ function Popup() {
                 </div>
               </div>
             )}
-        </div>
+          </div>
+        )}
       </div>
-
-    </GridSmallBackground>
-
+    </div>
   );
-
 }
 
 createRoot(document.getElementById("root")!).render(<Popup />);
