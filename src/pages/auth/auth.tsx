@@ -73,7 +73,7 @@ function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-bg text-text font-[Space_Grotesk,sans-serif] flex items-center justify-center p-6">
+    <div className="min-h-screen w-full min-w-full bg-bg text-text font-[Space_Grotesk,sans-serif] flex items-center justify-center p-6">
       <div className="relative w-full max-w-sm rounded-xl overflow-hidden bg-surface border border-border/50 shadow-sm flex flex-col items-center pt-10 pb-8 px-8">
         <div className="absolute top-0 left-0 bottom-0 w-1 bg-ak-accent opacity-50" />
 
