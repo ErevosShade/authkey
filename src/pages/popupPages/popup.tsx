@@ -1,10 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { Separator } from "../../components/ui/separator";
-import { Button } from "../../components/ui/button";
-import { Lock } from "lucide-react";
-import { GridSmallBackground } from "../../components/ui/grid";
-import Lottie from "lottie-react";
-import lockAnimation from "@/lottieFiles/lock.json";
 import { createRoot } from "react-dom/client";
 import { registerUser } from "@/webAuthn";
 import {
@@ -15,76 +9,87 @@ import {
 } from "@/messages";
 import "@/index.css";
 
-type UserProfile = {
-  userId: string;
-};
+import { DYNAMIC, type Theme } from "../../components/shared/tokens";
+import { Sun, Moon } from "../../components/shared/icons";
+import { SetupScreen } from "../../components/popup/SetupScreen";
+import { MainScreen } from "../../components/popup/MainScreen";
+import { ScheduleScreen } from "../../components/popup/ScheduleScreen";
+import type { Screen, Repeat, Schedule } from "../../components/popup/types";
 
-const sendMessage = <T,>(message: unknown): Promise<T> =>
-  new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(message, (response) => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        reject(error);
+const sendMessage = <T,>(msg: unknown): Promise<T> =>
+  new Promise((resolve, reject) =>
+    chrome.runtime.sendMessage(msg, (res) => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
         return;
       }
-      resolve(response as T);
-    });
-  });
+      resolve(res as T);
+    }),
+  );
 
 function Popup() {
-  const [activeHost, setActiveHost] = useState<string>("");
-  const [activeUrl, setActiveUrl] = useState<string>("");
+  const [theme, setTheme] = useState<Theme>("dark");
+  const [screen, setScreen] = useState<Screen>("main");
   const [isRegistered, setIsRegistered] = useState(false);
-  const [userId, setUserId] = useState<string>("");
-  const [status, setStatus] = useState<string>("");
+  const [userId, setUserId] = useState("");
+  const [status, setStatus] = useState("");
+  const [activeHost, setActiveHost] = useState("");
+  const [activeUrl, setActiveUrl] = useState("");
   const [lockState, setLockState] = useState<GetLockStateResponse | null>(null);
   const [lockedSites, setLockedSites] = useState<LockedSiteSummary[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [schHost, setSchHost] = useState("");
+  const [schStart, setSchStart] = useState("09:00");
+  const [schEnd, setSchEnd] = useState("17:00");
+  const [schRepeat, setSchRepeat] = useState<Repeat>("daily");
+  const [schDays, setSchDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [schStatus, setSchStatus] = useState("");
 
-  const loadActiveTab = () => {
+  const dyn = DYNAMIC[theme];
+  const dk = theme === "dark";
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dk);
+  }, [dk]);
+
+  useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const tab = tabs[0];
-      const url = tab?.url ?? "";
+      const url = tabs[0]?.url ?? "";
       const host = url ? new URL(url).hostname : "";
       setActiveUrl(url);
       setActiveHost(host);
+      setSchHost(host);
     });
-  };
-
-  const loadUserProfile = () => {
-    chrome.storage.local.get("authkey_user", (result) => {
-      const profile = result.authkey_user as UserProfile | undefined;
-      if (profile?.userId) {
+    chrome.storage.local.get("authkey_user", (r) => {
+      const p = r.authkey_user as { userId?: string } | undefined;
+      if (p?.userId) {
         setIsRegistered(true);
-        setUserId(profile.userId);
-      } else {
-        setIsRegistered(false);
+        setUserId(p.userId);
       }
     });
-  };
+    chrome.storage.local.get("authkey_theme", (r) => {
+      if (r.authkey_theme === "light") setTheme("light");
+    });
+    chrome.storage.local.get("authkey_schedules", (r) => {
+      if (Array.isArray(r.authkey_schedules)) setSchedules(r.authkey_schedules);
+    });
+  }, []);
 
   const refreshLockState = useCallback(async () => {
-    if (!activeHost) {
-      return;
-    }
-
-    const response = await sendMessage<GetLockStateResponse>({
+    if (!activeHost) return;
+    const r = await sendMessage<GetLockStateResponse>({
       type: MESSAGE_TYPES.GET_LOCK_STATE,
       host: activeHost,
       url: activeUrl,
     });
-    setLockState(response);
+    setLockState(r);
   }, [activeHost, activeUrl]);
 
   const refreshLockedSites = useCallback(async () => {
-    const response = await sendMessage<GetLockedSitesResponse>({
+    const r = await sendMessage<GetLockedSitesResponse>({
       type: MESSAGE_TYPES.GET_LOCKED_SITES,
     });
-    setLockedSites(response.sites.filter((site) => site.isLocked));
-  }, []);
-
-  useEffect(() => {
-    loadActiveTab();
-    loadUserProfile();
+    setLockedSites(r.sites.filter((s) => s.isLocked));
   }, []);
 
   useEffect(() => {
@@ -94,135 +99,179 @@ function Popup() {
 
   const handleRegister = async () => {
     setStatus("");
-
     if (!userId.trim()) {
-      setStatus("User name is required.");
+      setStatus("// username required");
       return;
     }
-
-    const result = await registerUser(userId.trim());
-    setStatus(result.message);
-    if (result.success) {
-      setIsRegistered(true);
-    }
+    const r = await registerUser(userId.trim());
+    setStatus(r.message);
+    if (r.success) setIsRegistered(true);
   };
 
   const handleToggleLock = async () => {
     if (!activeHost) {
-      setStatus("No active website detected.");
+      setStatus("// no active tab");
       return;
     }
-
-    const nextLockState = !lockState?.isLocked;
     await sendMessage({
       type: MESSAGE_TYPES.SET_LOCK_STATE,
       host: activeHost,
       url: activeUrl,
-      isLocked: nextLockState,
+      isLocked: !lockState?.isLocked,
     });
-
     await refreshLockState();
     await refreshLockedSites();
   };
 
-  const renderLockStatus = () => {
-    if (!lockState?.isLocked) {
-      return "Not locked";
-    }
+  const handleRepeatChange = (r: Repeat) => {
+    setSchRepeat(r);
+    if (r === "daily") setSchDays([0, 1, 2, 3, 4, 5, 6]);
+    if (r === "weekdays") setSchDays([1, 2, 3, 4, 5]);
+    if (r === "weekends") setSchDays([0, 6]);
+    if (r === "never") setSchDays([]);
+  };
 
-    if (lockState.isUnlocked) {
-      return "Unlocked (temporary)";
-    }
+  const saveSchedules = (next: Schedule[]) => {
+    setSchedules(next);
+    chrome.storage.local.set({ authkey_schedules: next });
+  };
 
-    return "Locked";
+  const toggleTheme = () => {
+    const next: Theme = dk ? "light" : "dark";
+    setTheme(next);
+    chrome.storage.local.set({ authkey_theme: next });
   };
 
   return (
-    <GridSmallBackground>
-      <div className="w-full h-full flex flex-col items-center text-white gap-2 p-4 overflow-visible">
-        <h1 className="text-white text-3xl font-extrabold font-sans">AuthKey</h1>
-        <p className="text-muted-foreground text-sm font-sans">
-          A simple extension to manage your privacy
-        </p>
-        <Separator />
+    <div className="relative w-[500px] h-[600px] overflow-hidden bg-bg text-text text-base font-[Space_Grotesk,sans-serif]">
+      <div
+        className="absolute inset-0 pointer-events-none z-0 opacity-60"
+        style={{
+          backgroundImage: `linear-gradient(${dyn.grid} 1px, transparent 1px), linear-gradient(90deg, ${dyn.grid} 1px, transparent 1px)`,
+          backgroundSize: "32px 32px",
+        }}
+      />
 
-        {!isRegistered ? (
-          <>
-            <Lottie
-              animationData={lockAnimation}
-              loop
-              autoplay
-              className="w-1/2 h-1/2 opacity-80 brightness-[0.2] grayscale mask-[radial-gradient(circle_at_center,black_0%,transparent_80%)]"
+      <div className="relative z-10 flex flex-col px-8 pt-6 pb-5 h-full">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2.5 font-mono font-bold text-lg text-text">
+            AuthKey
+            <span
+              className="rounded-full flex-shrink-0 w-2.5 h-2.5 bg-ak-accent opacity-80"
+              style={{ boxShadow: dk ? `0 0 12px ${dyn.accentHex}66` : "none" }}
             />
-            <h1 className="text-white text-2xl font-extrabold font-sans text-wrap-balance text-center">
-              Set up your passcode to use AuthKey
-            </h1>
-            <div className="w-full space-y-2">
-              <input
-                type="text"
-                placeholder="User name"
-                value={userId}
-                onChange={(event) => setUserId(event.target.value)}
-                className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm"
-              />
-            </div>
-            <Button
-              className="mt-4 px-10 py-7 rounded-md cursor-pointer"
-              onClick={handleRegister}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-xs tracking-[0.12em] px-2 py-1 rounded text-text-muted">
+              v1.0
+            </span>
+            <button
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              className="flex items-center justify-center w-8 h-8 rounded  text-text-muted bg-transparent cursor-pointer transition-opacity hover:opacity-70"
             >
-              Register AuthKey
-            </Button>
-            {status ? (
-              <p className="text-xs text-slate-300 text-center">{status}</p>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <div className="rounded-[5%] shadow-[inset_11.11px_11.11px_17px_#131316,inset_-11.11px_-11.11px_17px_#1D1D20] bg-[linear-gradient(145deg,#121214,#1E1E22)] w-full h-30 flex items-center flex-col gap-2 p-4">
-              <h1 className="text-white text-xl font-extrabold font-sans h-8">
-                🌐 Website
-              </h1>
-              <span className="text-sm text-slate-300">{activeHost || "No active tab"}</span>
-              <span className="text-xs text-slate-400">{renderLockStatus()}</span>
-              <Button
-                className="rounded-[7%] shadow-[inset_11.41px_11.41px_20px_#101012,inset_-11.41px_-11.41px_20px_#202024] bg-[linear-gradient(145deg,#1E1E22,#121214)] px-6 py-3"
-                onClick={handleToggleLock}
-              >
-                {lockState?.isLocked ? "Remove lock" : "Lock"}
-              </Button>
-            </div>
+              {dk ? <Sun /> : <Moon />}
+            </button>
+          </div>
+        </div>
 
-            <div className="rounded-[10%] shadow-[inset_11.11px_11.11px_17px_#131316,inset_-11.11px_-11.11px_17px_#1D1D20] bg-[linear-gradient(145deg,#121214,#1E1E22)] w-full h-64 mt-4 flex items-center flex-col gap-2 p-4">
-              <h1 className="text-white text-xl font-extrabold font-sans h-10 flex items-center justify-around gap-2">
-                <Lock /> Your Protected Websites
-              </h1>
-              <ul className="w-full h-full overflow-y-auto overflow-x-hidden text-sm">
-                {lockedSites.length === 0 ? (
-                  <li className="text-center text-slate-400">No locked sites yet.</li>
-                ) : (
-                  lockedSites.map((site) => (
-                    <li
-                      key={site.host}
-                      className="my-3 w-full bg-zinc-800 px-4 py-2 rounded-md flex items-center justify-between"
-                    >
-                      <span className="text-white text-sm font-sans">{site.host}</span>
-                      <span className="text-xs text-slate-400">Locked</span>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </div>
+        <div className="relative mb-6 opacity-70">
+          <div className="h-px bg-ak-border/60" />
+          <div className="absolute top-0 left-0 h-px w-10 bg-ak-accent" />
+        </div>
 
-            {status ? (
-              <p className="text-xs text-slate-300 text-center">{status}</p>
-            ) : null}
-          </>
-        )}
+        <div className="flex-1 overflow-y-auto pr-2">
+          {!isRegistered ? (
+            <SetupScreen
+              userId={userId}
+              status={status}
+              onUserIdChange={setUserId}
+              onRegister={handleRegister}
+            />
+          ) : screen === "main" ? (
+            <MainScreen
+              dyn={dyn}
+              dk={dk}
+              userId={userId}
+              status={status}
+              activeHost={activeHost}
+              lockState={lockState}
+              lockedSites={lockedSites}
+              activeScheduleCount={schedules.filter((s) => s.active).length}
+              onToggleLock={handleToggleLock}
+              onGoToSchedule={() => setScreen("schedule")}
+            />
+          ) : (
+            <ScheduleScreen
+              schedules={schedules}
+              schHost={schHost}
+              schStart={schStart}
+              schEnd={schEnd}
+              schRepeat={schRepeat}
+              schDays={schDays}
+              schStatus={schStatus}
+              onBack={() => {
+                setScreen("main");
+                setSchStatus("");
+              }}
+              onHostChange={setSchHost}
+              onStartChange={setSchStart}
+              onEndChange={setSchEnd}
+              onRepeatChange={handleRepeatChange}
+              onToggleDay={(d) => {
+                setSchDays((prev) =>
+                  prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d],
+                );
+                setSchRepeat("custom");
+              }}
+              onCreate={handleCreateSchedule}
+              onToggleSchedule={(id) =>
+                saveSchedules(
+                  schedules.map((s) =>
+                    s.id === id ? { ...s, active: !s.active } : s,
+                  ),
+                )
+              }
+              onDeleteSchedule={(id) =>
+                saveSchedules(schedules.filter((s) => s.id !== id))
+              }
+            />
+          )}
+        </div>
       </div>
-    </GridSmallBackground>
+    </div>
   );
+
+  async function handleCreateSchedule() {
+    setSchStatus("");
+    if (!schHost.trim()) {
+      setSchStatus("// host required");
+      return;
+    }
+    if (!schStart || !schEnd) {
+      setSchStatus("// set both times");
+      return;
+    }
+    if (schStart >= schEnd) {
+      setSchStatus("// end must be after start");
+      return;
+    }
+    saveSchedules([
+      ...schedules,
+      {
+        id: `sch_${Date.now()}`,
+        host: schHost.trim(),
+        startTime: schStart,
+        endTime: schEnd,
+        repeat: schRepeat,
+        days: schDays,
+        active: true,
+      },
+    ]);
+    setSchStatus("// schedule created");
+    setSchHost(activeHost);
+  }
 }
 
 createRoot(document.getElementById("root")!).render(<Popup />);
-
 export default Popup;
