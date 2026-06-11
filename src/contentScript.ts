@@ -35,7 +35,8 @@ function mountOverlay(): void {
   container.style.position = 'fixed';
   container.style.inset = '0';
   container.style.zIndex = '2147483647';
-  container.style.background = '#050507';
+  container.style.background = 'rgba(5, 5, 7, 0.95)';
+  container.style.backdropFilter = 'blur(8px)';
   container.style.display = 'flex';
   container.style.alignItems = 'center';
   container.style.justifyContent = 'center';
@@ -44,37 +45,169 @@ function mountOverlay(): void {
   shadow.innerHTML = `
     <style>
       :host { all: initial; }
-      .wrap {
-        font-family: 'Segoe UI', sans-serif;
-        color: #f8fafc;
+      
+      .overlay {
+        font-family: 'Space Grotesk', system-ui, sans-serif;
+        color: #f3f4f6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        width: 100vw;
+      }
+
+      .card {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 16px;
-        padding: 32px 28px;
-        border-radius: 16px;
-        background: radial-gradient(circle at top, #1f2937 0%, #0f172a 80%);
-        box-shadow: 0 16px 30px rgba(15, 23, 42, 0.6);
+        background: #09090b;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 40px 32px;
         max-width: 360px;
-        text-align: center;
+        width: 100%;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        overflow: hidden;
       }
-      h1 { font-size: 22px; margin: 0; }
-      p { margin: 0; color: #cbd5f5; font-size: 14px; }
-      button {
-        border: none;
-        border-radius: 10px;
-        padding: 10px 18px;
-        font-size: 14px;
+
+      .left-accent {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 4px;
+        background: #00e5ff;
+        opacity: 0.5;
+      }
+
+      .shield {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: #121214;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        margin-bottom: 24px;
+        position: relative;
+      }
+
+      .shield::before {
+        content: '';
+        position: absolute;
+        inset: -8px;
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.04);
+      }
+      
+      .shield::after {
+        content: '';
+        position: absolute;
+        inset: -16px;
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.02);
+      }
+
+      .shield svg {
+        width: 24px;
+        height: 24px;
+        color: #00e5ff;
+        opacity: 0.8;
+      }
+
+      .tag {
+        font-family: monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        font-size: 10px;
+        color: #00e5ff;
+        opacity: 0.8;
+        margin-bottom: 8px;
+      }
+
+      h1 {
+        font-size: 20px;
         font-weight: 600;
-        background: linear-gradient(135deg, #38bdf8, #4f46e5);
-        color: #0f172a;
+        margin: 0 0 8px 0;
+        letter-spacing: 0.02em;
+      }
+
+      p {
+        font-family: monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-size: 10px;
+        color: #9ca3af;
+        margin: 0 0 32px 0;
+        text-align: center;
+        opacity: 0.8;
+      }
+
+      button {
+        position: relative;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        background: #121214;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        color: #f3f4f6;
+        padding: 14px;
+        font-family: monospace;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        font-size: 12px;
         cursor: pointer;
+        transition: opacity 0.2s, background 0.2s;
+        overflow: hidden;
+      }
+
+      button:hover {
+        opacity: 0.9;
+        background: #18181b;
+      }
+
+      button .btn-accent {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: #00e5ff;
+        opacity: 0.8;
+      }
+
+      button svg {
+        width: 14px;
+        height: 14px;
+        opacity: 0.9;
       }
     </style>
-    <div class="wrap">
-      <h1>Site locked</h1>
-      <p id="authkey-message">Authenticate to unlock ${host}</p>
-      <button id="authkey-unlock">Unlock with AuthKey</button>
+    <div class="overlay">
+      <div class="card">
+        <div class="left-accent"></div>
+        <div class="shield">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+        </div>
+        <div class="tag">Access Restricted</div>
+        <h1>Site Locked</h1>
+        <p id="authkey-message">Authenticate to unlock ${host}</p>
+        <button id="authkey-unlock">
+          <div class="btn-accent"></div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          Unlock Site
+        </button>
+      </div>
     </div>
   `;
 

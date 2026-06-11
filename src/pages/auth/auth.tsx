@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { authenticateUser } from '@/webAuthn';
 import { MESSAGE_TYPES } from '@/messages';
+import { ShieldFP } from "../../components/shared/ShieldFP";
+import { UnlockIcon } from "../../components/shared/icons";
 import '@/index.css';
 
 type UserProfile = {
@@ -16,6 +18,8 @@ function AuthPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    document.documentElement.classList.add("dark");
+
     const params = new URLSearchParams(window.location.search);
     const tabIdParam = params.get('tabId');
     const hostParam = params.get('host');
@@ -69,31 +73,49 @@ function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 text-white flex items-center justify-center p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold">Unlock {host}</h1>
-          <p className="text-sm text-slate-300">
-            Authenticate with WebAuthn.
-          </p>
+    <div className="min-h-screen w-full bg-bg text-text font-[Space_Grotesk,sans-serif] flex items-center justify-center p-6">
+      <div className="relative w-full max-w-sm rounded-xl overflow-hidden bg-surface border border-border/50 shadow-sm flex flex-col items-center pt-10 pb-8 px-8">
+        <div className="absolute top-0 left-0 bottom-0 w-1 bg-ak-accent opacity-50" />
+
+        <div className="relative flex items-center justify-center rounded-full flex-shrink-0 mb-8 w-24 h-24 bg-surface-deep border border-border/50 shadow-sm">
+          <div className="absolute rounded-full pointer-events-none opacity-40 border border-border/40" style={{ inset: -12 }} />
+          <div className="absolute rounded-full pointer-events-none opacity-20 border border-border/40" style={{ inset: -24 }} />
+          <ShieldFP />
         </div>
 
-        {error ? (
-          <p className="mt-4 rounded-md bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-            {error}
-          </p>
-        ) : null}
+        <span className="font-mono uppercase tracking-widest text-[10px] text-ak-accent opacity-80 mb-2">
+          Authentication Required
+        </span>
 
-        <button
-          type="button"
-          onClick={handleUnlock}
-          disabled={isSubmitting}
-          className="mt-6 w-full rounded-lg bg-gradient-to-r from-sky-400 to-indigo-500 px-4 py-2 text-sm font-semibold text-slate-950 transition disabled:opacity-60"
-        >
-          {isSubmitting ? 'Authenticating...' : 'Unlock'}
-        </button>
+        <h2 className="font-sans font-semibold text-center text-xl leading-tight tracking-wide text-text mb-2 opacity-90">
+          Unlock {host}
+        </h2>
 
-        <p className="mt-4 text-xs text-slate-500">
+        <p className="font-mono uppercase tracking-widest text-[10px] text-text-muted mb-8 opacity-70 text-center">
+          verify with webauthn to continue
+        </p>
+
+        <div className="w-full flex flex-col gap-4">
+          {error ? (
+            <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-3 text-center">
+              <p className="font-mono text-xs tracking-wide text-rose-400">
+                {error}
+              </p>
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={handleUnlock}
+            disabled={isSubmitting}
+            className="relative w-full flex items-center justify-center gap-3 rounded-lg font-mono font-bold uppercase overflow-hidden cursor-pointer transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-sm tracking-widest p-4 bg-btn-bg border border-btn-border/50 text-text shadow-sm"
+          >
+            <span className="absolute top-0 left-0 bottom-0 w-1 bg-ak-accent opacity-80" />
+            <UnlockIcon color="currentColor" /> {isSubmitting ? 'Verifying...' : 'Unlock Site'}
+          </button>
+        </div>
+
+        <p className="mt-6 font-mono text-center text-xs tracking-wide text-text-muted opacity-80">
           Signed in as {userId ?? 'unknown'}
         </p>
       </div>
