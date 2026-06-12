@@ -11,8 +11,8 @@ interface StoredCredential {
   };
 }
 
-const RP_ID = chrome.runtime.id;
-const ORIGIN = `chrome-extension://${chrome.runtime.id}`;
+const RP_ID = typeof chrome !== 'undefined' && chrome.runtime ? chrome.runtime.id : window.location.hostname;
+const ORIGIN = typeof chrome !== 'undefined' && chrome.runtime ? `chrome-extension://${chrome.runtime.id}` : window.location.origin;
 
 function arrayBufferToBase64String(buffer: ArrayBuffer): string {
   return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(buffer))))
@@ -162,16 +162,21 @@ export const registerUser = async (userId: string): Promise<{ success: boolean; 
       publicKeyAlgorithm: credential.response.publicKeyAlgorithm || -7, // Default to ES256
     };
 
-    // Store in Chrome extension storage
-    await chrome.storage.local.set({ [`credential_${userId}`]: credentialData });
-    await chrome.storage.local.set({ authkey_user: { userId } });
+    // Store in Chrome extension storage (or localStorage for dev)
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      await chrome.storage.local.set({ [`credential_${userId}`]: credentialData });
+      await chrome.storage.local.set({ authkey_user: { userId } });
+    } else {
+      localStorage.setItem(`credential_${userId}`, JSON.stringify(credentialData));
+      localStorage.setItem('authkey_user', JSON.stringify({ userId }));
+    }
     console.log('Stored credential data:', credentialData);
 
     return { 
       success: true, 
       message: 'WebAuthn registration successful!' 
     };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Registration error:', error);
     return { 
       success: false, 
@@ -345,7 +350,7 @@ export const authenticateUser = async (userId: string): Promise<{ success: boole
         success: true, 
         message: 'Authentication successful!' 
       };
-    } catch (verifyError) {
+    } catch (verifyError: unknown) {
       console.error('Verification error:', {
         error: verifyError,
         clientData: assertion.response.clientDataJSON ? 
@@ -357,7 +362,7 @@ export const authenticateUser = async (userId: string): Promise<{ success: boole
       });
       throw verifyError;
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Authentication error:', error);
     return { 
       success: false, 

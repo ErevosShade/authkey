@@ -247,7 +247,7 @@ async function requestUnlock(reason: 'auto' | 'manual'): Promise<void> {
       host,
       url: window.location.href,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     setOverlayMessage('Unable to open AuthKey. Try again from the extension.');
     console.error('AuthKey unlock request failed', error);
   }
@@ -269,7 +269,7 @@ async function init(): Promise<void> {
       mountOverlay();
       void requestUnlock('auto');
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('AuthKey lock state check failed', error);
   }
 }

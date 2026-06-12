@@ -108,7 +108,7 @@ export async function verifySignature(
       signature,
       data
     );
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('Signature verification failed:', err);
     return false;
   }

@@ -123,7 +123,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 
   handleMessage()
     .then((response) => sendResponse(response))
-    .catch((error) => {
+    .catch((error: unknown) => {
       sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
     });
 

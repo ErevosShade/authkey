@@ -6,6 +6,8 @@ export type LockedSiteRecord = {
   updatedAt: number;
   unlockUntil?: number;
   lastUrl?: string;
+  unlockCount?: number;
+  avgLockDuration?: number;
 };
 
 class AuthKeyDB extends Dexie {
@@ -33,6 +35,8 @@ export async function setLockRecord(host: string, isLocked: boolean, url: string
     updatedAt,
     unlockUntil: undefined,
     lastUrl: url,
+    unlockCount: 0,
+    avgLockDuration: 0,
   });
 }
 
@@ -46,7 +50,12 @@ export async function setUnlockUntil(host: string, unlockUntil?: number): Promis
     ...existing,
     unlockUntil,
     updatedAt: Date.now(),
+    unlockCount: (existing.unlockCount || 0) + (unlockUntil ? 1 : 0),
   });
+}
+
+export async function deleteLockRecord(host: string): Promise<void> {
+  await db.lockedSites.delete(host);
 }
 
 export async function getLockedSites(): Promise<LockedSiteRecord[]> {
