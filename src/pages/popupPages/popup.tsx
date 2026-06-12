@@ -160,23 +160,7 @@ function Popup() {
               className="rounded-full flex-shrink-0 w-2.5 h-2.5 bg-ak-accent opacity-80"
               style={{ boxShadow: dk ? `0 0 12px ${dyn.accentHex}66` : "none" }}
             />
-            <h1 className="text-white text-2xl font-extrabold font-sans text-balance text-center">
-              Set up your passcode to use AuthKey
-            </h1>
-            <div className="w-full space-y-2">
-              <input
-                type="text"
-                placeholder="User name"
-                value={userId}
-                onChange={(event) => setUserId(event.target.value)}
-                className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm"
-              />
-            </div>
-            <button
-              className="mt-4 px-10 py-7 rounded-md cursor-pointer"
-              onClick={handleRegister}></button>
-            
-        </div>
+          </div>
           <div className="flex items-center gap-3">
             <span className="font-mono text-xs tracking-[0.12em] px-2 py-1 rounded text-text-muted">
               v1.0
