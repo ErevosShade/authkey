@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { FC } from "react";
 import { 
   Clock, 
@@ -14,15 +14,25 @@ import {
   Repeat, 
   Calendar, 
   Trash2, 
-  Lock 
+  Lock,
+  Pencil
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { TimePickerInput } from "../shared/TimePickerInput";
-import { type Site } from "../../contexts/ExtensionContext";
+import { type Site, useSites } from "../../contexts/ExtensionContext";
+import { getAllSchedules, putSchedule, deleteScheduleRecord } from "../../storage/lockDb";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+import duration from "dayjs/plugin/duration";
+import isBetween from "dayjs/plugin/isBetween";
 
+dayjs.extend(customParseFormat);
+dayjs.extend(duration);
+dayjs.extend(isBetween);
 interface Schedule {
   id: number;
   name: string;
@@ -33,6 +43,7 @@ interface Schedule {
   customDays: string[];
   isActive: boolean;
   canModify: boolean;
+  triggerDate?: string;
 }
 
 // Day options for scheduling
@@ -59,6 +70,129 @@ interface ScheduleLockProps {
   sites: Site[];
 }
 
+const ScheduleCountdown: FC<{ schedule: Schedule }> = ({ schedule }) => {
+  const [timeLeft, setTimeLeft] = useState("");
+  const [status, setStatus] = useState<"locking" | "waiting" | "">("");
+
+  useEffect(() => {
+    if (!schedule.isActive) {
+      setTimeLeft("");
+      setStatus("");
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = dayjs();
+      const daysMap = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+      const isValidDay = (d: dayjs.Dayjs) => {
+        if (schedule.repeat === "never") {
+        
+          if (!schedule.triggerDate) return false;
+          return d.isSame(dayjs(schedule.triggerDate), 'day');
+        }
+        if (schedule.repeat === "daily") return true;
+        const dayIndex = d.day();
+        const dayName = daysMap[dayIndex];
+        if (schedule.repeat === "weekdays") return dayIndex >= 1 && dayIndex <= 5;
+        if (schedule.repeat === "weekends") return dayIndex === 0 || dayIndex === 6;
+        if (schedule.repeat === "custom") return schedule.customDays.includes(dayName);
+        return true;
+      };
+
+      let currentlyLockingEnd = null;
+ 
+      const yesterday = now.subtract(1, "day");
+      if (isValidDay(yesterday)) {
+        const startY = dayjs(`${yesterday.format("YYYY-MM-DD")} ${schedule.startTime}`, "YYYY-MM-DD HH:mm");
+        let endY = dayjs(`${yesterday.format("YYYY-MM-DD")} ${schedule.endTime}`, "YYYY-MM-DD HH:mm");
+        if (endY.isBefore(startY)) endY = endY.add(1, "day");
+
+        if (now.isBetween(startY, endY, null, "[)")) {
+          currentlyLockingEnd = endY;
+        }
+      }
+
+      // Check today's window
+      const today = now;
+      if (!currentlyLockingEnd && isValidDay(today)) {
+        const startT = dayjs(`${today.format("YYYY-MM-DD")} ${schedule.startTime}`, "YYYY-MM-DD HH:mm");
+        let endT = dayjs(`${today.format("YYYY-MM-DD")} ${schedule.endTime}`, "YYYY-MM-DD HH:mm");
+        if (endT.isBefore(startT)) endT = endT.add(1, "day");
+
+        if (now.isBetween(startT, endT, null, "[)")) {
+          currentlyLockingEnd = endT;
+        }
+      }
+
+      const formatDiff = (diffMs: number) => {
+        const dur = dayjs.duration(diffMs);
+        const d = Math.floor(dur.asDays());
+        const h = dur.hours();
+        const m = dur.minutes().toString().padStart(2, "0");
+        const s = dur.seconds().toString().padStart(2, "0");
+        let tStr = "";
+        if (d > 0) tStr += `${d}d `;
+        tStr += `${h}h ${m}m ${s}s`;
+        return tStr;
+      };
+
+      if (currentlyLockingEnd) {
+        setStatus("locking");
+        setTimeLeft(formatDiff(currentlyLockingEnd.diff(now)));
+
+        
+        if (schedule.repeat === "never" && now.isAfter(currentlyLockingEnd)) {
+          const deactivated = { ...schedule, isActive: false };
+          putSchedule(deactivated);
+        }
+      } else {
+     
+        let nextStart = null;
+        for (let i = 0; i <= 7; i++) {
+          const checkDay = now.add(i, "day");
+          if (isValidDay(checkDay)) {
+            const startC = dayjs(`${checkDay.format("YYYY-MM-DD")} ${schedule.startTime}`, "YYYY-MM-DD HH:mm");
+            if (startC.isAfter(now)) {
+              nextStart = startC;
+              break;
+            }
+          }
+        }
+
+        if (nextStart) {
+          setStatus("waiting");
+          setTimeLeft(formatDiff(nextStart.diff(now)));
+        } else {
+         
+          if (schedule.repeat === "never" && schedule.isActive) {
+            const deactivated = { ...schedule, isActive: false };
+            putSchedule(deactivated);
+          }
+          setStatus("");
+        }
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [schedule]);
+
+  if (!schedule.isActive || !status) return null;
+
+  return (
+    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-mono text-xs ${
+      status === "locking" 
+        ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400" 
+        : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30 text-amber-600 dark:text-amber-400"
+    }`}>
+      <Timer className="w-3.5 h-3.5" />
+      {status === "locking" ? `Ends in ${timeLeft}` : `Starts in ${timeLeft}`}
+    </span>
+  );
+};
+
 export const ScheduleLock: FC<ScheduleLockProps> = ({ sites: initialSites = [] }) => {
   const [sites, setSites] = useState<Site[]>(initialSites);
   const [selectedSites, setSelectedSites] = useState<number[]>([]);
@@ -71,31 +205,24 @@ export const ScheduleLock: FC<ScheduleLockProps> = ({ sites: initialSites = [] }
   const [newSiteUrl, setNewSiteUrl] = useState("");
   const [showSites, setShowSites] = useState(true);
   const [siteSearchQuery, setSiteSearchQuery] = useState("");
+  const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null);
+  const topRef = useRef<HTMLDivElement>(null);
 
-  const [scheduledLocks, setScheduledLocks] = useState<Schedule[]>([
-    {
-      id: 1,
-      name: "Work Hours Focus",
-      sites: ["facebook.com", "youtube.com"],
-      startTime: "09:00",
-      endTime: "17:00",
-      repeat: "weekdays",
-      customDays: [],
-      isActive: true,
-      canModify: true,
-    },
-    {
-      id: 2,
-      name: "Sleep Time",
-      sites: ["instagram.com", "tiktok.com"],
-      startTime: "22:00",
-      endTime: "06:00",
-      repeat: "daily",
-      customDays: [],
-      isActive: false,
-      canModify: false,
-    },
-  ]);
+  const [scheduledLocks, setScheduledLocks] = useState<Schedule[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<{isOpen: boolean, scheduleId: number | null}>({isOpen: false, scheduleId: null});
+  const { addSite } = useSites();
+
+  useEffect(() => {
+    setSites(initialSites);
+  }, [initialSites]);
+
+  useEffect(() => {
+    getAllSchedules().then((saved) => {
+      if (saved && saved.length > 0) {
+        setScheduledLocks(saved as Schedule[]);
+      }
+    });
+  }, []);
 
   const toggleSiteSelection = (siteId: number) => {
     setSelectedSites((prev) =>
@@ -105,27 +232,26 @@ export const ScheduleLock: FC<ScheduleLockProps> = ({ sites: initialSites = [] }
     );
   };
 
-  const handleAddSite = () => {
+  const handleAddSite = async () => {
     if (newSiteUrl.trim()) {
-      const cleanUrl = newSiteUrl.trim().toLowerCase();
+      const rawUrl = newSiteUrl.trim().toLowerCase();
+      const host = rawUrl.replace(/^(https?:\/\/)?(www\.)?/, "").split("/")[0];
       // Check if URL already exists
-      const existing = sites.find((s) => s.url.toLowerCase() === cleanUrl);
+      const existing = sites.find((s) => s.url.toLowerCase() === host);
       if (existing) {
         if (!selectedSites.includes(existing.id)) {
           setSelectedSites((prev) => [...prev, existing.id]);
         }
       } else {
-        const newSite: Site = {
-          id: Math.max(0, ...sites.map((s) => s.id)) + 1,
-          url: cleanUrl,
-          icon: "🌐",
-          isLocked: true,
-          category: "Custom",
-          unlockCount: 0,
-          avgLockDuration: 0,
-        };
-        setSites((prev) => [...prev, newSite]);
-        setSelectedSites((prev) => [...prev, newSite.id]);
+        await addSite(host);
+
+        setSites((currentSites) => {
+          const newSite = currentSites.find((s) => s.url.toLowerCase() === host);
+          if (newSite && !selectedSites.includes(newSite.id)) {
+            setSelectedSites((prev) => [...prev, newSite.id]);
+          }
+          return currentSites;
+        });
       }
       setNewSiteUrl("");
       setShowAddSite(false);
@@ -140,23 +266,68 @@ export const ScheduleLock: FC<ScheduleLockProps> = ({ sites: initialSites = [] }
     );
   };
 
-  const addSchedule = () => {
-    if (selectedSites.length > 0 && startTime && endTime) {
-      const newSchedule: Schedule = {
-        id: Math.max(...scheduledLocks.map((s) => s.id)) + 1,
-        name: scheduleName || `Schedule ${scheduledLocks.length + 1}`,
-        sites: selectedSites
-          .map((id) => sites.find((s) => s.id === id)?.url)
-          .filter(Boolean) as string[],
-        startTime,
-        endTime,
-        repeat: repeatOption,
-        customDays: repeatOption === "custom" ? customDays : [],
-        isActive: true,
-        canModify: true,
-      };
+  const handleEditSchedule = (schedule: Schedule) => {
+    setEditingScheduleId(schedule.id);
+    setScheduleName(schedule.name);
+    
+    const siteIds = schedule.sites
+      .map((url) => sites.find((s) => s.url === url)?.id)
+      .filter((id): id is number => id !== undefined);
+    setSelectedSites(siteIds);
+    
+    setStartTime(schedule.startTime);
+    setEndTime(schedule.endTime);
+    setRepeatOption(schedule.repeat);
+    setCustomDays(schedule.customDays);
+    
+    setTimeout(() => {
+      topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  };
 
-      setScheduledLocks([...scheduledLocks, newSchedule]);
+  const addSchedule = async () => {
+    if (isFormValid()) {
+      if (editingScheduleId !== null) {
+        const existingSchedule = scheduledLocks.find(s => s.id === editingScheduleId);
+        if (!existingSchedule) {
+          setEditingScheduleId(null);
+          return;
+        }
+
+        const updatedSchedule: Schedule = {
+          ...existingSchedule,
+          name: scheduleName || `Schedule ${editingScheduleId}`,
+          sites: selectedSites
+            .map((id) => sites.find((s) => s.id === id)?.url)
+            .filter(Boolean) as string[],
+          startTime,
+          endTime,
+          repeat: repeatOption,
+          customDays: repeatOption === "custom" ? customDays : [],
+          triggerDate: repeatOption === "never" ? dayjs().format("YYYY-MM-DD") : undefined,
+        };
+        
+        setScheduledLocks(prev => prev.map(s => s.id === editingScheduleId ? updatedSchedule : s));
+        putSchedule(updatedSchedule);
+        setEditingScheduleId(null);
+      } else {
+        const newScheduleData: Omit<Schedule, 'id'> & { id?: number } = {
+          name: scheduleName || `Schedule ${scheduledLocks.length + 1}`,
+          sites: selectedSites
+            .map((id) => sites.find((s) => s.id === id)?.url)
+            .filter(Boolean) as string[],
+          startTime,
+          endTime,
+          repeat: repeatOption,
+          customDays: repeatOption === "custom" ? customDays : [],
+          triggerDate: repeatOption === "never" ? dayjs().format("YYYY-MM-DD") : undefined,
+          isActive: true,
+          canModify: true,
+        };
+  
+        const newId = await putSchedule(newScheduleData as Schedule);
+        setScheduledLocks([...scheduledLocks, { ...newScheduleData, id: newId } as Schedule]);
+      }
 
       // Reset form
       setSelectedSites([]);
@@ -170,12 +341,16 @@ export const ScheduleLock: FC<ScheduleLockProps> = ({ sites: initialSites = [] }
 
   const removeSchedule = (id: number) => {
     setScheduledLocks((prev) => prev.filter((s) => s.id !== id));
+    deleteScheduleRecord(id);
   };
 
   const toggleSchedule = (id: number) => {
-    setScheduledLocks((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s))
-    );
+    setScheduledLocks((prev) => {
+      const updated = prev.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s));
+      const toggled = updated.find(s => s.id === id);
+      if (toggled) putSchedule(toggled);
+      return updated;
+    });
   };
 
   const getRepeatText = (schedule: Schedule) => {
@@ -206,13 +381,13 @@ export const ScheduleLock: FC<ScheduleLockProps> = ({ sites: initialSites = [] }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" ref={topRef}>
       {/* Create New Schedule */}
       <Card className="p-6 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] rounded-2xl shadow-sm relative overflow-hidden">
         <Clock className="absolute -right-12 -top-20 w-60 h-60 text-gray-400 dark:text-gray-400 opacity-[0.18] pointer-events-none z-0" />
         <h3 className="text-lg font-semibold text-black dark:text-white mb-6 flex items-center gap-2 relative z-10">
           <Timer className="w-5 h-5 text-black dark:text-white" />
-          Create Schedule Lock
+          {editingScheduleId !== null ? "Edit Schedule Lock" : "Create Schedule Lock"}
         </h3>
 
         {/* Schedule Name */}
@@ -430,14 +605,33 @@ export const ScheduleLock: FC<ScheduleLockProps> = ({ sites: initialSites = [] }
           )}
         </div>
 
-        <Button
-          onClick={addSchedule}
-          disabled={!isFormValid()}
-          className="w-full bg-black dark:bg-white hover:bg-gray-900 dark:hover:bg-gray-100 text-white dark:text-black rounded-xl py-6 font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-        >
-          <Clock className="w-5 h-5 mr-2" />
-          Create Schedule Lock
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            onClick={addSchedule}
+            disabled={!isFormValid()}
+            className="flex-1 bg-black dark:bg-white hover:bg-gray-900 dark:hover:bg-gray-100 text-white dark:text-black rounded-xl py-6 font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            <Clock className="w-5 h-5 mr-2" />
+            {editingScheduleId !== null ? "Save Schedule" : "Create Schedule Lock"}
+          </Button>
+          {editingScheduleId !== null && (
+            <Button
+              onClick={() => {
+                setEditingScheduleId(null);
+                setSelectedSites([]);
+                setStartTime("");
+                setEndTime("");
+                setRepeatOption("never");
+                setCustomDays([]);
+                setScheduleName("");
+              }}
+              variant="outline"
+              className="flex-shrink-0 border-gray-300 dark:border-[#333] hover:bg-gray-50 dark:hover:bg-[#252525] text-black dark:text-white rounded-xl py-6 px-6 font-semibold transition-all"
+            >
+              Cancel
+            </Button>
+          )}
+        </div>
         {!isFormValid() && (
           <p className="text-xs text-gray-400 dark:text-gray-400 text-center mt-3 font-medium">
             {!selectedSites.length && !startTime && !endTime
@@ -505,6 +699,7 @@ export const ScheduleLock: FC<ScheduleLockProps> = ({ sites: initialSites = [] }
                         <Repeat className="w-3.5 h-3.5 text-black dark:text-white" />
                         {getRepeatText(schedule)}
                       </span>
+                      {schedule.isActive && <ScheduleCountdown schedule={schedule} />}
                     </div>
                   </div>
                   <div className="flex items-center gap-3 ml-4">
@@ -517,9 +712,9 @@ export const ScheduleLock: FC<ScheduleLockProps> = ({ sites: initialSites = [] }
                     {schedule.canModify && (
                       <Button
                         variant="ghost"
-                        size="icon"
-                        onClick={() => removeSchedule(schedule.id)}
-                        className="text-gray-400 dark:text-gray-400 hover:text-red-600 hover:bg-red-50"
+                        size="sm"
+                        onClick={() => setDeleteConfirm({ isOpen: true, scheduleId: schedule.id })}
+                        className="p-1.5 h-auto text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -527,19 +722,30 @@ export const ScheduleLock: FC<ScheduleLockProps> = ({ sites: initialSites = [] }
                   </div>
                 </div>
 
-                <div className="space-y-2 mt-4 pt-4 border-t border-gray-100 dark:border-[#2A2A2A]">
-                  <div className="text-xs font-medium text-gray-400 dark:text-gray-400 uppercase tracking-wider">Locked Sites:</div>
-                  <div className="flex flex-wrap gap-2">
-                    {schedule.sites.map((site, index) => (
-                      <Badge
-                        key={index}
-                        variant="outline"
-                        className="text-xs border-gray-200 dark:border-[#2A2A2A] bg-white dark:bg-[#1A1A1A] text-gray-700 dark:text-gray-300 py-1"
-                      >
-                        {site}
-                      </Badge>
-                    ))}
+                <div className="flex justify-between items-end mt-4 pt-4 border-t border-gray-100 dark:border-[#2A2A2A]">
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-gray-400 dark:text-gray-400 uppercase tracking-wider">Locked Sites:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {schedule.sites.map((site, index) => (
+                        <Badge
+                          key={index}
+                          variant="outline"
+                          className="text-xs border-gray-200 dark:border-[#2A2A2A] bg-white dark:bg-[#1A1A1A] text-gray-700 dark:text-gray-300 py-1"
+                        >
+                          {site}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-shrink-0 bg-white dark:bg-[#1A1A1A] text-gray-700 dark:text-gray-300 border-gray-200 dark:border-[#2A2A2A] hover:bg-gray-100 dark:hover:bg-[#252525]"
+                    onClick={() => handleEditSchedule(schedule)}
+                  >
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
                 </div>
               </div>
             ))
@@ -554,6 +760,40 @@ export const ScheduleLock: FC<ScheduleLockProps> = ({ sites: initialSites = [] }
           )}
         </div>
       </Card>
+
+      <Dialog open={deleteConfirm.isOpen} onOpenChange={(open) => !open && setDeleteConfirm({ isOpen: false, scheduleId: null })}>
+        <DialogContent className="bg-white dark:bg-[#1A1A1A] border-gray-200 dark:border-[#2A2A2A] text-black dark:text-white max-w-md rounded-2xl shadow-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-500 font-semibold">
+              <Trash2 className="w-5 h-5" />
+              Delete Schedule
+            </DialogTitle>
+            <DialogDescription className="text-gray-800 dark:text-gray-400 mt-2">
+              Are you sure you want to delete this schedule? This action cannot be undone and the scheduled locks will be permanently removed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-6 flex gap-3 sm:justify-start">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirm({ isOpen: false, scheduleId: null })}
+              className="flex-1 border-gray-300 dark:border-[#333] bg-white hover:bg-gray-50 dark:bg-[#1F1F1F] dark:hover:bg-[#252525] text-black dark:text-white"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (deleteConfirm.scheduleId !== null) {
+                  removeSchedule(deleteConfirm.scheduleId);
+                  setDeleteConfirm({ isOpen: false, scheduleId: null });
+                }
+              }}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white dark:text-white dark:bg-red-700 dark:hover:bg-red-800"
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

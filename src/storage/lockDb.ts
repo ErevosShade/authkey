@@ -10,13 +10,31 @@ export type LockedSiteRecord = {
   avgLockDuration?: number;
 };
 
+export type ScheduleRecord = {
+  id?: number; // Optional for auto-incrementing inserts, but we can manage IDs manually too.
+  name: string;
+  sites: string[];
+  startTime: string;
+  endTime: string;
+  repeat: string;
+  customDays: string[];
+  isActive: boolean;
+  canModify: boolean;
+  triggerDate?: string; // ISO date string for one-time ("never") schedules
+};
+
 class AuthKeyDB extends Dexie {
   lockedSites!: Table<LockedSiteRecord, string>;
+  schedules!: Table<ScheduleRecord, number>;
 
   constructor() {
     super('authkey');
     this.version(1).stores({
       lockedSites: '&host, isLocked, updatedAt, unlockUntil',
+    });
+    this.version(2).stores({
+      lockedSites: '&host, isLocked, updatedAt, unlockUntil',
+      schedules: '++id, isActive',
     });
   }
 }
@@ -60,4 +78,16 @@ export async function deleteLockRecord(host: string): Promise<void> {
 
 export async function getLockedSites(): Promise<LockedSiteRecord[]> {
   return db.lockedSites.toArray();
+}
+
+export async function getAllSchedules(): Promise<ScheduleRecord[]> {
+  return db.schedules.toArray();
+}
+
+export async function putSchedule(schedule: ScheduleRecord): Promise<number> {
+  return db.schedules.put(schedule);
+}
+
+export async function deleteScheduleRecord(id: number): Promise<void> {
+  return db.schedules.delete(id);
 }
