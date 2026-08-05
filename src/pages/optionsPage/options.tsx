@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -33,11 +33,13 @@ import { ConfirmationModal } from "../../components/shared/ConfirmationModal";
 import { LoginScreen } from "../../components/options/LoginScreen";
 import { ScheduleLock } from "../../components/options/ScheduleLock";
 import { Analytics } from "../../components/options/Analytics";
+import { getActivityLogs, type ActivityLogRecord } from "../../storage/lockDb";
 
 function Options() {
   const { isLoggedIn, isLoading: isAuthLoading, user } = useAuth();
   const { sites, addSite, removeSite, toggleSiteLock } = useSites();
-  const [todayUnlocks] = useState(23);
+  const [todayUnlocks, setTodayUnlocks] = useState(0);
+  const [recentLogs, setRecentLogs] = useState<ActivityLogRecord[]>([]);
   const [showAddSite, setShowAddSite] = useState(false);
   const [newSiteUrl, setNewSiteUrl] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -55,8 +57,25 @@ function Options() {
 
   const sitesPerPage = 6;
 
-  const handleToggleSiteLock = (host: string) => {
-    toggleSiteLock(host).catch(console.error);
+  const refreshLogs = useCallback(async () => {
+    const logs = await getActivityLogs();
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    
+    const unlocksToday = logs.filter(l => l.type === 'unlocked' && l.timestamp >= startOfDay).length;
+    setTodayUnlocks(unlocksToday);
+    setRecentLogs(logs.slice(0, 3));
+  }, []);
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      refreshLogs();
+    }
+  }, [isLoggedIn, activeTab, refreshLogs]);
+
+  const handleToggleSiteLock = async (host: string) => {
+    await toggleSiteLock(host);
+    await refreshLogs();
   };
 
   const openConfirmModal = (url: string, siteName: string) => {
@@ -67,19 +86,29 @@ function Options() {
     setConfirmModal({ isOpen: false, siteUrl: null, siteName: "" });
   };
 
-  const confirmRemoveSite = () => {
+  const confirmRemoveSite = async () => {
     if (confirmModal.siteUrl) {
-      removeSite(confirmModal.siteUrl).catch(console.error);
+      await removeSite(confirmModal.siteUrl);
+      await refreshLogs();
     }
     closeConfirmModal();
   };
 
-  const addNewSite = () => {
+  const addNewSite = async () => {
     if (newSiteUrl.trim()) {
-      addSite(newSiteUrl.trim()).catch(console.error);
+      await addSite(newSiteUrl.trim());
+      await refreshLogs();
       setNewSiteUrl("");
       setShowAddSite(false);
     }
+  };
+
+  const formatTimeAgo = (timestamp: number) => {
+    const diff = Math.floor((Date.now() - timestamp) / 1000);
+    if (diff < 60) return `${diff}s`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+    return `${Math.floor(diff / 86400)}d`;
   };
 
   const lockedCount = sites.filter((site) => site.isLocked).length;
@@ -444,21 +473,27 @@ function Options() {
                   <Card className="p-6 bg-white dark:bg-[#1A1A1A] border border-gray-200 hover:border-gray-300 dark:border-[#333] rounded-2xl shadow-sm hover:shadow-md transition-all duration-300">
                     <h3 className="text-lg font-semibold text-black dark:text-white mb-4 tracking-tight">Recent Activity</h3>
                     <div className="space-y-2">
-                      <div className="flex items-center gap-3 p-3 rounded-xl border bg-gray-100 dark:bg-[#252525] border-gray-200 dark:border-[#2A2A2A] hover:bg-gray-200 dark:hover:bg-[#2D2D2D] hover:border-gray-300 dark:hover:border-[#333] transition-colors">
-                        <div className="w-2 h-2 bg-green-500 rounded-full shrink-0"></div>
-                        <span className="text-sm text-black dark:text-white font-medium grow">Unlocked facebook.com</span>
-                        <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">2m</span>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 rounded-xl border bg-white dark:bg-[#1A1A1A] border-gray-200 dark:border-[#2A2A2A] hover:bg-gray-100 dark:hover:bg-[#222222] hover:border-gray-300 dark:hover:border-[#333] transition-colors">
-                        <div className="w-2 h-2 bg-red-500 rounded-full shrink-0"></div>
-                        <span className="text-sm text-black dark:text-white font-medium grow">Locked youtube.com</span>
-                        <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">5m</span>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 rounded-xl border bg-gray-100 dark:bg-[#252525] border-gray-200 dark:border-[#2A2A2A] hover:bg-gray-200 dark:hover:bg-[#2D2D2D] hover:border-gray-300 dark:hover:border-[#333] transition-colors">
-                        <div className="w-2 h-2 bg-black dark:bg-white rounded-full shrink-0"></div>
-                        <span className="text-sm text-black dark:text-white font-medium grow">Added reddit.com</span>
-                        <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">1h</span>
-                      </div>
+                      {recentLogs.length > 0 ? recentLogs.map((log, i) => (
+                        <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
+                          i % 2 === 0 
+                            ? 'bg-gray-100 dark:bg-[#252525] border-gray-200 dark:border-[#2A2A2A] hover:bg-gray-200 dark:hover:bg-[#2D2D2D] hover:border-gray-300 dark:hover:border-[#333]'
+                            : 'bg-white dark:bg-[#1A1A1A] border-gray-200 dark:border-[#2A2A2A] hover:bg-gray-100 dark:hover:bg-[#222222] hover:border-gray-300 dark:hover:border-[#333]'
+                        }`}>
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${
+                            log.type === 'unlocked' ? 'bg-green-500' :
+                            log.type === 'locked' ? 'bg-red-500' :
+                            log.type === 'added' ? 'bg-black dark:bg-white' : 'bg-gray-500'
+                          }`}></div>
+                          <span className="text-sm text-black dark:text-white font-medium grow">
+                            {log.type.charAt(0).toUpperCase() + log.type.slice(1)} {log.host}
+                          </span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">
+                            {formatTimeAgo(log.timestamp)}
+                          </span>
+                        </div>
+                      )) : (
+                        <div className="text-sm text-gray-400 text-center py-4">No recent activity</div>
+                      )}
                     </div>
                   </Card>
                 </div>

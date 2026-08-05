@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import type { FC, ReactNode } from "react";
-import { getLockedSites, setLockRecord, deleteLockRecord, getLockRecord } from "../storage/lockDb";
+import { getLockedSites, setLockRecord, deleteLockRecord, getLockRecord, logActivity } from "../storage/lockDb";
 import { registerUser } from "../webAuthn";
 
 export interface Site {
@@ -123,12 +123,14 @@ export const ExtensionProvider: FC<{ children: ReactNode }> = ({ children }) => 
     const cleanUrl = url.trim().replace(/^(https?:\/\/)?(www\.)?/, "").split("/")[0];
     if (!cleanUrl) return;
     await setLockRecord(cleanUrl, true, url);
+    await logActivity(cleanUrl, 'added');
     await refreshSites();
   }, [refreshSites]);
 
   // Remove site
   const removeSite = useCallback(async (host: string) => {
     await deleteLockRecord(host);
+    await logActivity(host, 'removed');
     await refreshSites();
   }, [refreshSites]);
 
@@ -137,6 +139,7 @@ export const ExtensionProvider: FC<{ children: ReactNode }> = ({ children }) => 
     const record = await getLockRecord(host);
     if (record) {
       await setLockRecord(host, !record.isLocked, record.lastUrl || `https://${host}`);
+      await logActivity(host, !record.isLocked ? 'locked' : 'unlocked');
       await refreshSites();
     }
   }, [refreshSites]);

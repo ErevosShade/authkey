@@ -23,9 +23,17 @@ export type ScheduleRecord = {
   triggerDate?: string; // ISO date string for one-time ("never") schedules
 };
 
+export type ActivityLogRecord = {
+  id?: number;
+  host: string;
+  type: 'locked' | 'unlocked' | 'added' | 'removed';
+  timestamp: number;
+};
+
 class AuthKeyDB extends Dexie {
   lockedSites!: Table<LockedSiteRecord, string>;
   schedules!: Table<ScheduleRecord, number>;
+  activityLogs!: Table<ActivityLogRecord, number>;
 
   constructor() {
     super('authkey');
@@ -36,19 +44,30 @@ class AuthKeyDB extends Dexie {
       lockedSites: '&host, isLocked, updatedAt, unlockUntil',
       schedules: '++id, isActive',
     });
+    this.version(3).stores({
+      lockedSites: '&host, isLocked, updatedAt, unlockUntil',
+      schedules: '++id, isActive',
+      activityLogs: '++id, host, type, timestamp',
+    });
   }
 }
 
 export const db = new AuthKeyDB();
 
+export function cleanHost(host: string): string {
+  if (!host) return "";
+  return host.trim().toLowerCase().replace(/^(www\.)?/, "");
+}
+
 export async function getLockRecord(host: string): Promise<LockedSiteRecord | undefined> {
-  return db.lockedSites.get(host);
+  return db.lockedSites.get(cleanHost(host));
 }
 
 export async function setLockRecord(host: string, isLocked: boolean, url: string): Promise<void> {
+  const clean = cleanHost(host);
   const updatedAt = Date.now();
   await db.lockedSites.put({
-    host,
+    host: clean,
     isLocked,
     updatedAt,
     unlockUntil: undefined,
@@ -59,7 +78,8 @@ export async function setLockRecord(host: string, isLocked: boolean, url: string
 }
 
 export async function setUnlockUntil(host: string, unlockUntil?: number): Promise<void> {
-  const existing = await db.lockedSites.get(host);
+  const clean = cleanHost(host);
+  const existing = await db.lockedSites.get(clean);
   if (!existing) {
     return;
   }
@@ -73,7 +93,7 @@ export async function setUnlockUntil(host: string, unlockUntil?: number): Promis
 }
 
 export async function deleteLockRecord(host: string): Promise<void> {
-  await db.lockedSites.delete(host);
+  await db.lockedSites.delete(cleanHost(host));
 }
 
 export async function getLockedSites(): Promise<LockedSiteRecord[]> {
@@ -85,9 +105,24 @@ export async function getAllSchedules(): Promise<ScheduleRecord[]> {
 }
 
 export async function putSchedule(schedule: ScheduleRecord): Promise<number> {
-  return db.schedules.put(schedule);
+  return db.schedules.put({
+    ...schedule,
+    sites: schedule.sites.map(s => cleanHost(s))
+  });
 }
 
 export async function deleteScheduleRecord(id: number): Promise<void> {
   return db.schedules.delete(id);
+}
+
+export async function logActivity(host: string, type: ActivityLogRecord['type']): Promise<void> {
+  await db.activityLogs.add({
+    host: cleanHost(host),
+    type,
+    timestamp: Date.now(),
+  });
+}
+
+export async function getActivityLogs(): Promise<ActivityLogRecord[]> {
+  return db.activityLogs.orderBy('timestamp').reverse().toArray();
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { FC } from "react";
 import { useTheme } from "@/components/ui/theme-provider";
 import {
@@ -32,35 +32,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NumberTicker } from "../shared/NumberTicker";
 import { type Site } from "../../contexts/ExtensionContext";
-
-// Mock analytics data
-const weeklyUnlockData = [
-  { day: "Mon", unlocks: 12, hour: 0 },
-  { day: "Tue", unlocks: 8, hour: 0 },
-  { day: "Wed", unlocks: 15, hour: 0 },
-  { day: "Thu", unlocks: 6, hour: 0 },
-  { day: "Fri", unlocks: 20, hour: 0 },
-  { day: "Sat", unlocks: 18, hour: 0 },
-  { day: "Sun", unlocks: 10, hour: 0 },
-];
-
-const hourlyUnlockData = [
-  { hour: "6AM", unlocks: 2 },
-  { hour: "9AM", unlocks: 8 },
-  { hour: "12PM", unlocks: 15 },
-  { hour: "3PM", unlocks: 12 },
-  { hour: "6PM", unlocks: 18 },
-  { hour: "9PM", unlocks: 10 },
-  { hour: "12AM", unlocks: 3 },
-];
-
-const categoryData = [
-  { name: "Communication", value: 38, color: "#8B5CF6" }, // Purple (Innermost)
-  { name: "Professional", value: 15, color: "#F59E0B" }, // Yellow
-  { name: "Development", value: 20, color: "#10B981" }, // Green
-  { name: "Entertainment", value: 98, color: "#EF4444" }, // Red
-  { name: "Social Media", value: 130, color: "#3B82F6" }, // Blue (Outermost)
-];
+import { getActivityLogs } from "../../storage/lockDb";
+import dayjs from "dayjs";
 
 interface AnalyticsProps {
   sites: Site[];
@@ -70,9 +43,93 @@ export const Analytics: FC<AnalyticsProps> = ({ sites }) => {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const [timeRange, setTimeRange] = useState("week");
-  const [currentStreak] = useState(12);
-  const [longestStreak] = useState(28);
-  const [totalChallengesCompleted] = useState(45);
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [longestStreak, setLongestStreak] = useState(0);
+  const [totalChallengesCompleted, setTotalChallengesCompleted] = useState(0);
+  
+  const [weeklyUnlockData, setWeeklyUnlockData] = useState<{day: string, unlocks: number}[]>([]);
+  const [hourlyUnlockData, setHourlyUnlockData] = useState<{hour: string, unlocks: number}[]>([]);
+  const [categoryData, setCategoryData] = useState<{name: string, value: number, color: string}[]>([]);
+
+  useEffect(() => {
+    getActivityLogs().then(records => {
+      // Unlocks pattern
+      const weekMap: Record<string, number> = { "Mon": 0, "Tue": 0, "Wed": 0, "Thu": 0, "Fri": 0, "Sat": 0, "Sun": 0 };
+      const hourMap: Record<string, number> = { "12AM": 0, "3AM": 0, "6AM": 0, "9AM": 0, "12PM": 0, "3PM": 0, "6PM": 0, "9PM": 0 };
+      
+      const oneWeekAgo = dayjs().subtract(7, 'day');
+      const todayStart = dayjs().startOf('day');
+      
+      records.forEach(log => {
+        if (log.type === 'unlocked') {
+          const d = dayjs(log.timestamp);
+          if (d.isAfter(oneWeekAgo)) {
+             const dayName = d.format('ddd');
+             if (weekMap[dayName] !== undefined) weekMap[dayName]++;
+          }
+          if (d.isAfter(todayStart)) {
+             const h = d.hour();
+             const bin = h < 3 ? "12AM" : h < 6 ? "3AM" : h < 9 ? "6AM" : h < 12 ? "9AM" : h < 15 ? "12PM" : h < 18 ? "3PM" : h < 21 ? "6PM" : "9PM";
+             if (hourMap[bin] !== undefined) hourMap[bin]++;
+          }
+        }
+      });
+      
+      setWeeklyUnlockData(Object.keys(weekMap).map(day => ({ day, unlocks: weekMap[day] })));
+      setHourlyUnlockData(Object.keys(hourMap).map(hour => ({ hour, unlocks: hourMap[hour] })));
+
+      // Streaks
+      const unlocks = records.filter(r => r.type === 'unlocked').map(r => dayjs(r.timestamp).startOf('day').valueOf());
+      const uniqueDays = Array.from(new Set(unlocks)).sort((a, b) => b - a); // descending
+      
+      let current = 0;
+      let max = 0;
+      let tempMax = 0;
+      const today = dayjs().startOf('day').valueOf();
+      const yesterday = dayjs().subtract(1, 'day').startOf('day').valueOf();
+      
+      if (uniqueDays.length > 0) {
+        let expectedDay = uniqueDays[0] === today ? today : uniqueDays[0] === yesterday ? yesterday : -1;
+        if (expectedDay !== -1) {
+          for (const d of uniqueDays) {
+            if (d === expectedDay) {
+              current++;
+              expectedDay -= 86400000;
+            } else break;
+          }
+        }
+        
+        let prev = -1;
+        for (let i = uniqueDays.length - 1; i >= 0; i--) {
+          if (prev === -1 || uniqueDays[i] === prev + 86400000) {
+            tempMax++;
+          } else {
+            tempMax = 1;
+          }
+          max = Math.max(max, tempMax);
+          prev = uniqueDays[i];
+        }
+      }
+      
+      setCurrentStreak(current);
+      setLongestStreak(max);
+      setTotalChallengesCompleted(records.filter(r => r.type === 'locked').length);
+    });
+
+    // Categories
+    const counts: Record<string, number> = {};
+    sites.forEach(site => {
+       const cat = site.category || 'Other';
+       counts[cat] = (counts[cat] || 0) + Math.max(1, site.unlockCount);
+    });
+    const colors = ["#8B5CF6", "#F59E0B", "#10B981", "#EF4444", "#3B82F6", "#EC4899", "#14B8A6"];
+    setCategoryData(Object.keys(counts).map((name, i) => ({
+      name,
+      value: counts[name],
+      color: colors[i % colors.length]
+    })));
+
+  }, [sites]);
 
   const dimColor = (color: string) => {
     if (!isDark) return color;
@@ -239,7 +296,7 @@ export const Analytics: FC<AnalyticsProps> = ({ sites }) => {
                 innerRadius="20%"
                 outerRadius="95%"
                 barSize={12}
-                data={categoryData}
+                data={categoryData.length > 0 ? categoryData : [{name: "None", value: 1, color: "#9CA3AF"}]}
                 startAngle={90}
                 endAngle={-270}
               >
@@ -250,7 +307,7 @@ export const Analytics: FC<AnalyticsProps> = ({ sites }) => {
                   clockWise
                   dataKey="value"
                 >
-                  {categoryData.map((entry, index) => (
+                  {(categoryData.length > 0 ? categoryData : [{name: "None", value: 1, color: "#9CA3AF"}]).map((entry, index) => (
                     <Cell 
                       key={`cell-${index}`} 
                       fill={dimColor(entry.color)} 
@@ -385,22 +442,22 @@ export const Analytics: FC<AnalyticsProps> = ({ sites }) => {
           <div className="p-5 rounded-xl bg-gray-50 dark:bg-[#1F1F1F] border border-gray-200 hover:border-gray-300 dark:border-[#333] transition-colors">
             <Trophy className="w-8 h-8 text-yellow-500 mb-3" />
             <h4 className="font-semibold text-black dark:text-white">Week Warrior</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">7 days streak</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{currentStreak >= 7 ? "Unlocked!" : "7 days streak"}</p>
           </div>
           <div className="p-5 rounded-xl bg-gray-50 dark:bg-[#1F1F1F] border border-gray-200 hover:border-gray-300 dark:border-[#333] transition-colors">
             <Shield className="w-8 h-8 text-black dark:text-white mb-3" />
             <h4 className="font-semibold text-black dark:text-white">Lock Master</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">100 sites locked</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{totalChallengesCompleted >= 100 ? "Unlocked!" : "100 sites locked"}</p>
           </div>
           <div className="p-5 rounded-xl bg-gray-50 dark:bg-[#1F1F1F] border border-gray-200 hover:border-gray-300 dark:border-[#333] transition-colors">
             <Target className="w-8 h-8 text-green-600 mb-3" />
             <h4 className="font-semibold text-black dark:text-white">Focus Champion</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">30 challenges completed</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{totalChallengesCompleted >= 30 ? "Unlocked!" : "30 challenges completed"}</p>
           </div>
           <div className="p-5 rounded-xl bg-gray-50 dark:bg-[#1F1F1F] border border-gray-200 hover:border-gray-300 dark:border-[#333] transition-colors">
             <Flame className="w-8 h-8 text-orange-500 mb-3" />
             <h4 className="font-semibold text-black dark:text-white">Streak Legend</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">30 days streak</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{longestStreak >= 30 ? "Unlocked!" : "30 days streak"}</p>
           </div>
         </div>
       </Card>

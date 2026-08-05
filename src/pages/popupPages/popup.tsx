@@ -14,6 +14,7 @@ import { Sun, Moon } from "../../components/shared/icons";
 import { SetupScreen } from "../../components/popup/SetupScreen";
 import { MainScreen } from "../../components/popup/MainScreen";
 import { ScheduleScreen } from "../../components/popup/ScheduleScreen";
+import { getAllSchedules, putSchedule, deleteScheduleRecord, type ScheduleRecord } from "../../storage/lockDb";
 import type { Screen, Repeat, Schedule } from "../../components/popup/types";
 
 const sendMessage = <T,>(msg: unknown): Promise<T> =>
@@ -70,8 +71,20 @@ function Popup() {
     chrome.storage.local.get("authkey_theme", (r) => {
       if (r.authkey_theme === "light") setTheme("light");
     });
-    chrome.storage.local.get("authkey_schedules", (r) => {
-      if (Array.isArray(r.authkey_schedules)) setSchedules(r.authkey_schedules);
+    
+    // Load schedules from DB
+    getAllSchedules().then(records => {
+      const daysMap = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+      const mapped = records.map(s => ({
+        id: String(s.id),
+        host: s.sites[0] || "",
+        startTime: s.startTime,
+        endTime: s.endTime,
+        repeat: s.repeat as Repeat,
+        days: s.customDays.map(d => daysMap.indexOf(d)).filter(d => d !== -1),
+        active: s.isActive
+      }));
+      setSchedules(mapped);
     });
   }, []);
 
@@ -131,9 +144,8 @@ function Popup() {
     if (r === "never") setSchDays([]);
   };
 
-  const saveSchedules = (next: Schedule[]) => {
+  const saveSchedules = async (next: Schedule[]) => {
     setSchedules(next);
-    chrome.storage.local.set({ authkey_schedules: next });
   };
 
   const toggleTheme = () => {
@@ -226,16 +238,28 @@ function Popup() {
                 setSchRepeat("custom");
               }}
               onCreate={handleCreateSchedule}
-              onToggleSchedule={(id) =>
+              onToggleSchedule={async (id) => {
+                const s = schedules.find(x => x.id === id);
+                if (!s) return;
+                const toggled = { ...s, active: !s.active };
                 saveSchedules(
-                  schedules.map((s) =>
-                    s.id === id ? { ...s, active: !s.active } : s,
+                  schedules.map((x) =>
+                    x.id === id ? toggled : x,
                   ),
-                )
-              }
-              onDeleteSchedule={(id) =>
-                saveSchedules(schedules.filter((s) => s.id !== id))
-              }
+                );
+                
+                const dbRecords = await getAllSchedules();
+                const record = dbRecords.find(x => String(x.id) === id);
+                if (record) {
+                  await putSchedule({ ...record, isActive: toggled.active });
+                }
+              }}
+              onDeleteSchedule={async (id) => {
+                saveSchedules(schedules.filter((s) => s.id !== id));
+                if (!id.startsWith("sch_")) {
+                  await deleteScheduleRecord(Number(id));
+                }
+              }}
             />
           )}
         </div>
@@ -257,10 +281,26 @@ function Popup() {
       setSchStatus("// end must be after start");
       return;
     }
+    const daysMap = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+    
+    const dbRecord: ScheduleRecord = {
+      name: `Popup Schedule for ${schHost.trim()}`,
+      sites: [schHost.trim()],
+      startTime: schStart,
+      endTime: schEnd,
+      repeat: schRepeat,
+      customDays: schDays.map(d => daysMap[d]),
+      isActive: true,
+      canModify: true,
+      triggerDate: schRepeat === "never" ? new Date().toISOString().split('T')[0] : undefined
+    };
+    
+    const newId = await putSchedule(dbRecord);
+    
     saveSchedules([
       ...schedules,
       {
-        id: `sch_${Date.now()}`,
+        id: String(newId),
         host: schHost.trim(),
         startTime: schStart,
         endTime: schEnd,
