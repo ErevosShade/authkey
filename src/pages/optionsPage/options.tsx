@@ -25,6 +25,22 @@ import { createRoot } from "react-dom/client";
 import { Card } from "@/components/ui/card";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import "@/index.css";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { ExtensionProvider, useAuth, useSites } from "../../contexts/ExtensionContext";
 
 // Imported Shared/Options subcomponents
@@ -75,6 +91,24 @@ function Options() {
 
   const handleToggleSiteLock = async (host: string) => {
     await toggleSiteLock(host);
+    await refreshLogs();
+  };
+
+  const handleLockAll = async () => {
+    for (const site of sites) {
+      if (!site.isLocked) {
+        await toggleSiteLock(site.url);
+      }
+    }
+    await refreshLogs();
+  };
+
+  const handleUnlockAll = async () => {
+    for (const site of sites) {
+      if (site.isLocked) {
+        await toggleSiteLock(site.url);
+      }
+    }
     await refreshLogs();
   };
 
@@ -221,17 +255,55 @@ function Options() {
               <ModeToggle />
 
               {/* Notification Bell */}
-              <Button variant="ghost" size="icon" className="relative text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white rounded-full bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] hover:bg-gray-50 dark:hover:bg-[#252525] transition-all">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-[#F5F5F5] dark:border-[#0F0F0F] translate-x-1 -translate-y-1">
-                  2
-                </span>
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="relative text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white rounded-full bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] hover:bg-gray-50 dark:hover:bg-[#252525] transition-all cursor-pointer">
+                    <Bell className="w-5 h-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80 p-2 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#333] rounded-xl shadow-lg">
+                  <DropdownMenuLabel className="font-semibold text-black dark:text-white">Recent Notifications</DropdownMenuLabel>
+                  <DropdownMenuSeparator className="bg-gray-200 dark:bg-[#333]" />
+                  {recentLogs.length > 0 ? recentLogs.map((log, i) => (
+                    <DropdownMenuItem key={i} className="flex items-center gap-3 p-3 mb-1 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-[#252525]">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${log.type === 'unlocked' ? 'bg-green-500' : log.type === 'locked' ? 'bg-red-500' : log.type === 'added' ? 'bg-black dark:bg-white' : 'bg-gray-500'}`} />
+                      <div className="flex flex-col flex-1 overflow-hidden">
+                        <span className="text-sm font-medium text-black dark:text-white capitalize">Site {log.type}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{log.host}</span>
+                      </div>
+                      <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">{formatTimeAgo(log.timestamp)}</span>
+                    </DropdownMenuItem>
+                  )) : (
+                    <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">No new notifications</div>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               {/* Settings */}
-              <Button variant="ghost" size="icon" className="text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white rounded-full bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] hover:bg-gray-50 dark:hover:bg-[#252525] transition-all">
-                <Settings className="w-5 h-5" />
-              </Button>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white rounded-full bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#2A2A2A] hover:bg-gray-50 dark:hover:bg-[#252525] transition-all cursor-pointer">
+                    <Settings className="w-5 h-5" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md bg-white dark:bg-[#1A1A1A] border-gray-200 dark:border-[#333] rounded-2xl">
+                  <DialogHeader>
+                    <DialogTitle className="text-xl font-bold text-black dark:text-white">Settings</DialogTitle>
+                    <DialogDescription className="text-gray-500 dark:text-gray-400">
+                      Manage your AuthKey preferences and account details.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-6 py-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <h4 className="text-sm font-medium text-black dark:text-white">Theme Preference</h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Toggle dark mode manually</p>
+                      </div>
+                      <ModeToggle />
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
 
           </div>
@@ -455,15 +527,15 @@ function Options() {
                   <Card className="p-6 bg-white dark:bg-[#1A1A1A] border border-gray-200 hover:border-gray-300 dark:border-[#333] rounded-2xl shadow-sm hover:shadow-md transition-all duration-300">
                     <h3 className="text-lg font-semibold text-black dark:text-white mb-4 tracking-tight">Quick Actions</h3>
                     <div className="space-y-3">
-                      <Button variant="outline" className="w-full justify-start border-gray-200 dark:border-[#2A2A2A] bg-white hover:bg-gray-50 dark:hover:bg-[#252525] dark:bg-[#1F1F1F] text-black dark:text-white py-6 rounded-xl">
+                      <Button onClick={handleUnlockAll} variant="outline" className="w-full justify-start border-gray-200 dark:border-[#2A2A2A] bg-white hover:bg-gray-50 dark:hover:bg-[#252525] dark:bg-[#1F1F1F] text-black dark:text-white py-6 rounded-xl cursor-pointer">
                         <Eye className="w-4 h-4 mr-3 text-black dark:text-white" />
                         Unlock All Sites
                       </Button>
-                      <Button variant="outline" className="w-full justify-start border-gray-200 dark:border-[#2A2A2A] bg-white hover:bg-gray-50 dark:hover:bg-[#252525] dark:bg-[#1F1F1F] text-black dark:text-white py-6 rounded-xl">
+                      <Button onClick={handleLockAll} variant="outline" className="w-full justify-start border-gray-200 dark:border-[#2A2A2A] bg-white hover:bg-gray-50 dark:hover:bg-[#252525] dark:bg-[#1F1F1F] text-black dark:text-white py-6 rounded-xl cursor-pointer">
                         <EyeOff className="w-4 h-4 mr-3 text-black dark:text-white" />
                         Lock All Sites
                       </Button>
-                      <Button onClick={() => setActiveTab("schedule")} variant="outline" className="w-full justify-start border-gray-200 dark:border-[#2A2A2A] bg-white hover:bg-gray-50 dark:hover:bg-[#252525] dark:bg-[#1F1F1F] text-black dark:text-white py-6 rounded-xl">
+                      <Button onClick={() => setActiveTab("schedule")} variant="outline" className="w-full justify-start border-gray-200 dark:border-[#2A2A2A] bg-white hover:bg-gray-50 dark:hover:bg-[#252525] dark:bg-[#1F1F1F] text-black dark:text-white py-6 rounded-xl cursor-pointer">
                         <Timer className="w-4 h-4 mr-3 text-black dark:text-white" />
                         Schedule Locks
                       </Button>

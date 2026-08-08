@@ -46,6 +46,7 @@ export const Analytics: FC<AnalyticsProps> = ({ sites }) => {
   const [currentStreak, setCurrentStreak] = useState(0);
   const [longestStreak, setLongestStreak] = useState(0);
   const [totalChallengesCompleted, setTotalChallengesCompleted] = useState(0);
+  const [totalSitesLocked, setTotalSitesLocked] = useState(0);
   
   const [weeklyUnlockData, setWeeklyUnlockData] = useState<{day: string, unlocks: number}[]>([]);
   const [hourlyUnlockData, setHourlyUnlockData] = useState<{hour: string, unlocks: number}[]>([]);
@@ -113,7 +114,8 @@ export const Analytics: FC<AnalyticsProps> = ({ sites }) => {
       
       setCurrentStreak(current);
       setLongestStreak(max);
-      setTotalChallengesCompleted(records.filter(r => r.type === 'locked').length);
+      setTotalChallengesCompleted(records.filter(r => r.type === 'unlocked').length);
+      setTotalSitesLocked(records.filter(r => r.type === 'locked' || r.type === 'added').length);
     });
 
     // Categories
@@ -439,25 +441,25 @@ export const Analytics: FC<AnalyticsProps> = ({ sites }) => {
           Recent Achievements
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-5 rounded-xl bg-gray-50 dark:bg-[#1F1F1F] border border-gray-200 hover:border-gray-300 dark:border-[#333] transition-colors">
-            <Trophy className="w-8 h-8 text-yellow-500 mb-3" />
+          <div className={`p-5 rounded-xl bg-gray-50 dark:bg-[#1F1F1F] border transition-all ${currentStreak >= 7 ? 'border-yellow-500 shadow-sm' : 'border-gray-200 dark:border-[#333] opacity-60 grayscale'}`}>
+            <Trophy className={`w-8 h-8 mb-3 ${currentStreak >= 7 ? 'text-yellow-500' : 'text-gray-400'}`} />
             <h4 className="font-semibold text-black dark:text-white">Week Warrior</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{currentStreak >= 7 ? "Unlocked!" : "7 days streak"}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{currentStreak >= 7 ? "Unlocked!" : `${currentStreak} / 7 days streak`}</p>
           </div>
-          <div className="p-5 rounded-xl bg-gray-50 dark:bg-[#1F1F1F] border border-gray-200 hover:border-gray-300 dark:border-[#333] transition-colors">
-            <Shield className="w-8 h-8 text-black dark:text-white mb-3" />
+          <div className={`p-5 rounded-xl bg-gray-50 dark:bg-[#1F1F1F] border transition-all ${totalSitesLocked >= 100 ? 'border-blue-500 shadow-sm' : 'border-gray-200 dark:border-[#333] opacity-60 grayscale'}`}>
+            <Shield className={`w-8 h-8 mb-3 ${totalSitesLocked >= 100 ? 'text-blue-500' : 'text-gray-400'}`} />
             <h4 className="font-semibold text-black dark:text-white">Lock Master</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{totalChallengesCompleted >= 100 ? "Unlocked!" : "100 sites locked"}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{totalSitesLocked >= 100 ? "Unlocked!" : `${totalSitesLocked} / 100 sites locked`}</p>
           </div>
-          <div className="p-5 rounded-xl bg-gray-50 dark:bg-[#1F1F1F] border border-gray-200 hover:border-gray-300 dark:border-[#333] transition-colors">
-            <Target className="w-8 h-8 text-green-600 mb-3" />
+          <div className={`p-5 rounded-xl bg-gray-50 dark:bg-[#1F1F1F] border transition-all ${totalChallengesCompleted >= 30 ? 'border-green-600 shadow-sm' : 'border-gray-200 dark:border-[#333] opacity-60 grayscale'}`}>
+            <Target className={`w-8 h-8 mb-3 ${totalChallengesCompleted >= 30 ? 'text-green-600' : 'text-gray-400'}`} />
             <h4 className="font-semibold text-black dark:text-white">Focus Champion</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{totalChallengesCompleted >= 30 ? "Unlocked!" : "30 challenges completed"}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{totalChallengesCompleted >= 30 ? "Unlocked!" : `${totalChallengesCompleted} / 30 challenges completed`}</p>
           </div>
-          <div className="p-5 rounded-xl bg-gray-50 dark:bg-[#1F1F1F] border border-gray-200 hover:border-gray-300 dark:border-[#333] transition-colors">
-            <Flame className="w-8 h-8 text-orange-500 mb-3" />
+          <div className={`p-5 rounded-xl bg-gray-50 dark:bg-[#1F1F1F] border transition-all ${longestStreak >= 30 ? 'border-orange-500 shadow-sm' : 'border-gray-200 dark:border-[#333] opacity-60 grayscale'}`}>
+            <Flame className={`w-8 h-8 mb-3 ${longestStreak >= 30 ? 'text-orange-500' : 'text-gray-400'}`} />
             <h4 className="font-semibold text-black dark:text-white">Streak Legend</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{longestStreak >= 30 ? "Unlocked!" : "30 days streak"}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{longestStreak >= 30 ? "Unlocked!" : `${longestStreak} / 30 days streak`}</p>
           </div>
         </div>
       </Card>
